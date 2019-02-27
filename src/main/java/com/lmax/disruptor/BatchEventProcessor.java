@@ -189,7 +189,7 @@ public final class BatchEventProcessor<T>
         // 下一个消费的序号
         long nextSequence = sequence.get() + 1L;
 
-        // 死循环，因此不会让出线程，因此需要独立的线程(每一个EventProcessor都需要独立的线程)
+        // 死循环，因此不会让出线程，需要独立的线程(每一个EventProcessor都需要独立的线程)
         while (true)
         {
             try

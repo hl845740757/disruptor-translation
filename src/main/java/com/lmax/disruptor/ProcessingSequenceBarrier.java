@@ -37,7 +37,7 @@ final class ProcessingSequenceBarrier implements SequenceBarrier
 	private final Sequence cursorSequence;
 
 	/**
-	 * 消费者的管理策略
+	 * 消费者的等待策略
 	 */
 	private final WaitStrategy waitStrategy;
 	/**

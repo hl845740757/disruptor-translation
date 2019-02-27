@@ -25,7 +25,7 @@ import com.lmax.disruptor.util.Util;
 /**
  * 多生产者模型下的序号生成器
  * 注意:
- * 在使用该序号生成器时，{@link Sequencer#getCursor()} 后必须使用 {@link Sequencer#getHighestPublishedSequence(long, long)}
+ * 在使用该序号生成器时，调用{@link Sequencer#getCursor()}后必须 调用{@link Sequencer#getHighestPublishedSequence(long, long)}
  * 确定真正可用的序号。（因为多生产者模型下，生产者之间是无锁的，预分配空间，那么真正填充的数据可能是非连续的），因此需要确认
  *
  * <p>Coordinator for claiming sequences for access to a data structure while tracking dependent {@link Sequence}s.
@@ -43,8 +43,15 @@ public final class MultiProducerSequencer extends AbstractSequencer
     // 数组一个元素的地址偏移量(用于计算指定下标的元素的内存地址)
     private static final long SCALE = UNSAFE.arrayIndexScale(int[].class);
 	/**
-	 * 上次获取到的最小序号缓存，会被并发的访问，因此用Sequence，而单线程的Sequencer中则使用了一个普通long变量
-	 * 可以减少遍历(减少volatile读操作)
+	 * 上次获取到的最小序号缓存，会被并发的访问，因此用Sequence，而单线程的Sequencer中则使用了一个普通long变量。
+	 * 在任何时候查询了消费者进度信息时都需要更新它。
+	 * 某些时候可以减少{@link #gatingSequences}的遍历(减少volatile读操作)。
+	 *
+	 * Util.getMinimumSequence(gatingSequences, current)的查询结果是递增的，但是缓存结果不一定的是递增，变量的更新存在竞态条件，
+	 * 它可能会被设置为一个更小的值。
+	 *
+	 * gatingSequenceCache 的更新采用的都是set,因为本身就可能设置为一个错误的值(更小的值)，使用volatile写也无法解决该问题，
+	 * 使用set可以减少内存屏障消耗
 	 * {@link SingleProducerSequencerFields#cachedValue}
 	 */
     private final Sequence gatingSequenceCache = new Sequence(Sequencer.INITIAL_CURSOR_VALUE);
@@ -90,25 +97,45 @@ public final class MultiProducerSequencer extends AbstractSequencer
         return hasAvailableCapacity(gatingSequences, requiredCapacity, cursor.get());
     }
 
+	/**
+	 * 是否有足够的空间，多线程下返回的总是一个‘旧’值，不一定具有价值
+	 *
+	 * 总体思路:
+	 * 可能构成环路的点 如果 大于消费者的消费进度，则表示会发生追尾，空间不足
+	 *
+	 * @param gatingSequences 网关序列们
+	 * @param requiredCapacity 需要的空间
+	 * @param cursorValue 当前看见的生产者进度
+	 * @return
+	 */
     private boolean hasAvailableCapacity(Sequence[] gatingSequences, final int requiredCapacity, long cursorValue)
     {
-		// 减去一个循环之后，和消费者们处于同一个周期
+    	// 需要预分配这一段空间 cursorValue+1 ~ cursorValue+requiredCapacity这一段
+    	// 可能构成环路的点/环形缓冲区可能追尾的点 = 请求的序号 - 环形缓冲区大小
         long wrapPoint = (cursorValue + requiredCapacity) - bufferSize;
+        // 缓存的消费者们的最慢进度值，小于等于真实进度
+		// (对单个线程来说可能看见一个比该线程上次看见的更小的值/对另一个线程来说就可能看见一个比生产进度更大的值)
         long cachedGatingSequence = gatingSequenceCache.get();
 
-        // 这里还没理解透彻
+		// 1.wrapPoint > cachedGatingSequence 表示生产者追上消费者产生环路，上次看见的序号缓存无效，还需要更多的空间
+		// 2.cachedGatingSequence > nextValue 表示消费者的进度大于当前生产者进度，current无效，
+		// 当其它生产者竞争成功，发布的数据也被消费者消费了时可能产生。(如2生产者1个消费者)
+		// 无锁算法(CAS)都是比较烧脑的算法，尽量不要自己设计，交给大师们设计。
         if (wrapPoint > cachedGatingSequence || cachedGatingSequence > cursorValue)
         {
-            long minSequence = Util.getMinimumSequence(gatingSequences, cursorValue);
-            //
+			// 缓存无效，尝试更新一下缓存
+			long minSequence = Util.getMinimumSequence(gatingSequences, cursorValue);
+			// 这里存在竞态条件，多线程模式下，可能会被设置为多个线程看见的结果中的任意以一个。
+			// 可能比 cachedGatingSequence更小，可能比cursorValue更大
             gatingSequenceCache.set(minSequence);
 
+            // 是否产生环路/追尾
             if (wrapPoint > minSequence)
             {
                 return false;
             }
         }
-
+        // 看见有足够的空间
         return true;
     }
 
@@ -122,6 +149,9 @@ public final class MultiProducerSequencer extends AbstractSequencer
     }
 
     /**
+	 * 算法注释可参考 {@link #hasAvailableCapacity(Sequence[], int, long)}
+	 * 和 {@link #tryNext(int)}
+	 * 有细微区别
      * @see Sequencer#next()
      */
     @Override
@@ -131,6 +161,31 @@ public final class MultiProducerSequencer extends AbstractSequencer
     }
 
     /**
+	 * 返回条件：成功申请到空间才会返回。
+	 *
+	 * 总体思路：
+	 * 1.空间不足就继续等待。
+	 * 2.空间足够时尝试CAS竞争空间。
+	 * 3.竞争成功则返回，竞争失败则重试。
+	 *
+	 *
+	 *  如果不使用缓存的话可能是这样
+	 *  long current;
+	 *  long next;
+	 *        while (true){
+	 *			current = cursor.get();
+	 *			next = current + n;
+	 *			long wrapPoint = next - bufferSize;
+	 *			long gatingSequence = Util.getMinimumSequence(gatingSequences, current);
+	 *			if (wrapPoint > gatingSequence || gatingSequence > current){
+	 *				continue;
+	 *			}
+	 *			if (cursor.compareAndSet(current,next)){
+	 *				break;
+	 *			}
+	 *		}
+	 *	return next;
+	 *
      * @see Sequencer#next(int)
      */
     @Override
@@ -144,30 +199,50 @@ public final class MultiProducerSequencer extends AbstractSequencer
         long current;
         long next;
 
+		// 使用缓存导致太复杂
         do
         {
             current = cursor.get();
             next = current + n;
 
+            // 可能构成环路的点/环形缓冲区可能追尾的点 = 请求的序号 - 环形缓冲区大小
             long wrapPoint = next - bufferSize;
+            // 缓存的消费者们的最慢进度值，小于等于真实进度
             long cachedGatingSequence = gatingSequenceCache.get();
 
-            if (wrapPoint > cachedGatingSequence || cachedGatingSequence > current)
+            // 第一步：空间不足就继续等待。
+			// wrapPoint > cachedGatingSequence 表示生产者追上消费者产生环路，上次看见的序号缓存无效，还需要更多的空间
+			// cachedGatingSequence > nextValue 表示消费者的进度大于当前生产者进度，current无效，
+			// 当其它生产者竞争成功，发布的数据也被消费者消费了时可能产生。(如2生产者1个消费者)
+			// 无锁算法(CAS)都是比较烧脑的算法，尽量不要自己设计，交给大师们设计。
+			if (wrapPoint > cachedGatingSequence || cachedGatingSequence > current)
             {
+            	// 走进这里表示当前缓存对我来说没有帮助，尝试获取最新的消费者进度
                 long gatingSequence = Util.getMinimumSequence(gatingSequences, current);
 
+                // 消费者最新的进度仍然与我构成了环路，那么只能重试，减少不必要的缓存更新
                 if (wrapPoint > gatingSequence)
                 {
-                    LockSupport.parkNanos(1); // TODO, should we spin based on the wait strategy?
+					// 这里和查询是否用足够空间的区别，会停顿一下生产者，减少竞争程度
+					LockSupport.parkNanos(1); // TODO, should we spin based on the wait strategy?
                     continue;
                 }
 
+                // 检测到未构成环路(多线程下这都是假设条件)，更新网关序列，然后进行重试
+                // 这里存在竞态条件，多线程模式下，可能会被设置为一个更小的值，从而小于当前分配的值(current)
                 gatingSequenceCache.set(gatingSequence);
+
+                // 这里看见有足够空间，这里如果尝试竞争空间会产生重复的代码，其实就是外层的代码，因此直接等待下一个循环
             }
+            // 第二步：看见空间足够时尝试CAS竞争空间
             else if (cursor.compareAndSet(current, next))
             {
+            	// 第三步：成功竞争到了这片空间，返回
+            	// 注意！这里更新了生产者进度，然而生产者并未真正发布数据。
+				// 因此需要调用getHighestPublishedSequence()确认真正的可用空间
                 break;
             }
+            // 第三步：竞争失败则重试
         }
         while (true);
 
@@ -184,6 +259,14 @@ public final class MultiProducerSequencer extends AbstractSequencer
     }
 
     /**
+	 * 要搞清楚返回条件很重要：
+	 * 要么看见空间不足，要么看见有足够空间且成功申请到空间。
+	 *
+	 * 总体思路：
+	 * 1.查看是否有足空间
+	 * 2.如果空间不足，则失败返回。 如果空间足够，则CAS竞争。
+	 * 3.如果竞争成功，则返回，竞争失败则重试(竞争失败表示可能还有可用空间)。
+	 *
      * @see Sequencer#tryNext(int)
      */
     @Override
@@ -202,12 +285,13 @@ public final class MultiProducerSequencer extends AbstractSequencer
             current = cursor.get();
             next = current + n;
 
+            // 看见空间不够时返回
             if (!hasAvailableCapacity(gatingSequences, n, current))
             {
                 throw InsufficientCapacityException.INSTANCE;
             }
-        }
-        while (!cursor.compareAndSet(current, next));
+		}
+        while (!cursor.compareAndSet(current, next));//看见有足够的空间，CAS竞争失败时重试
 
         return next;
     }
@@ -218,6 +302,7 @@ public final class MultiProducerSequencer extends AbstractSequencer
     @Override
     public long remainingCapacity()
     {
+    	// 这里居然也没更新gatingSequenceCache。
         long consumed = Util.getMinimumSequence(gatingSequences, cursor.get());
         long produced = cursor.get();
         return getBufferSize() - (produced - consumed);

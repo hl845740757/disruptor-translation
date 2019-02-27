@@ -12,7 +12,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadFactory;
 
 /**
- * 之所以不再推荐使用Executor的方式创建Disruptor，即使因为外部的Executor可能是有界线程池，
+ * 之所以不再推荐使用Executor的方式创建Disruptor，是因为外部的Executor可能是有界线程池，
  * 每一个{@link com.lmax.disruptor.EventProcessor} 都需要一个独立的线程。
  * 如果无法为EventProcessor创建足够多的线程，则会造成死锁(消费者总体进度为进度最小的那个---未运行的那些必定在列)，
  * 导致生产者阻塞，生产者阻塞又导致其它消费者阻塞 --> 死锁。

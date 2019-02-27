@@ -36,12 +36,12 @@ public abstract class AbstractSequencer implements Sequencer
         AtomicReferenceFieldUpdater.newUpdater(AbstractSequencer.class, Sequence[].class, "gatingSequences");
 
 	/**
-	 * 序号生成器缓冲区大小(ringBuffer缓冲区大小)
+	 * 序号生成器缓冲区大小(ringBuffer有效数据缓冲区大小)
 	 */
 	protected final int bufferSize;
 	/**
 	 * 消费者的等待策略。
-	 * 因为SequenceBarrier由Sequencer创建，Barrier需要生产者的Sequence信息。
+	 * 为何放在这里？因为SequenceBarrier由Sequencer创建，Barrier需要生产者的Sequence信息。
 	 */
     protected final WaitStrategy waitStrategy;
 	/**

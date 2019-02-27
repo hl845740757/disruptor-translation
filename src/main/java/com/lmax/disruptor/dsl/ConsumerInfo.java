@@ -12,8 +12,7 @@ interface ConsumerInfo
 {
 	/**
 	 * 获取消费者拥有的所有的序列，消费者的消费进度由最小的Sequence决定
-	 * 一个消费者可能有多个Sequence，它的好处在于可以保持简单性，减少使用同一个Sequence交互/竞争。
-	 * 消费者的进度为Sequence最小那个。
+	 * 一个消费者可能有多个Sequence，它的好处在于可以保持简单性，减少使用同一个Sequence的交互/竞争。
 	 * eg:WorkPool构成的消费者就有多个Sequence
 	 * @return
 	 */

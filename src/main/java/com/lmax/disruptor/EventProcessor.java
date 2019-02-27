@@ -17,7 +17,7 @@ package com.lmax.disruptor;
 
 /**
  * 事件处理器(EventHandler的代理对象)
- * 一个事件处理器实现Runnable接口，在轮询使用适当的等待策略(WaitStrategy)从RingBuffer中轮询获取事件。
+ * 一个事件处理器实现Runnable接口，在轮询时使用适当的等待策略(WaitStrategy)从RingBuffer中轮询获取可用事件(拉取数据)。
  * 你最好不实现该接口而是优先使用EventHandler接口和BatchEventProcessor。
  *
  * 划重点：

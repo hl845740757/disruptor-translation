@@ -1,7 +1,7 @@
 package com.lmax.disruptor;
 
 /**
- * 事件轮询器
+ * 事件轮询器(没详细的研究，感觉它不是很重要)
  * Experimental poll-based interface for the Disruptor.
  */
 public class EventPoller<T>

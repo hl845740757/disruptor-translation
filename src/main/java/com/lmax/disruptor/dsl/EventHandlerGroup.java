@@ -27,7 +27,7 @@ import java.util.Arrays;
  * 事件处理器组，作为Disruptor构成中的一部分。
  * <b>这个类很重要</b>
  *
- * 用于组织消费者之间的关系(依赖关系)。
+ * 用于组织消费者之间的依赖关系。
  * 建立消费者之间的依赖其实也就是建立消费者与前驱节点的Sequence之间的依赖
  * 它会建立依赖消费者之间的依赖，也就是Barrier中的dependentSequence的由来。
  * {@link com.lmax.disruptor.ProcessingSequenceBarrier#dependentSequence}

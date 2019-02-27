@@ -155,7 +155,7 @@ public final class Util
 	 * 在指定对象上等待指定时间
 	 * @param mutex 锁对象
 	 * @param timeoutNanos 等待时间
-	 * @return
+	 * @return 返回剩余等待时间
 	 * @throws InterruptedException 等待过程中被中断则会抛出中断异常
 	 */
     public static long awaitNanos(Object mutex, long timeoutNanos) throws InterruptedException

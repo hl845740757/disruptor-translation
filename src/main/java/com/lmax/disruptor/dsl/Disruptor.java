@@ -46,7 +46,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *   {@link #handleEventsWith(EventProcessor...)}
  *   {@link #handleEventsWith(EventProcessorFactory[])}
  *   所有的 {@code handleEventsWith} 都是添加消费者，每一个{@link EventHandler}、
- *   {@link EventProcessor}、{@link EventProcessorFactory}都会包装为一个独立的消费者{@link BatchEventProcessor}
+ *   {@link EventProcessor}、{@link EventProcessorFactory}都会被包装为一个独立的消费者{@link BatchEventProcessor}
  *   数组长度就代表了添加的消费者个数。
  *
  * 3.{@link #handleEventsWithWorkerPool(WorkHandler[])} 方法为添加一个多线程的消费者，这些handler共同构成一个消费者.

@@ -28,7 +28,7 @@ public interface Sequenced
     boolean hasAvailableCapacity(int requiredCapacity);
 
     /**
-	 * 当前剩余容量
+	 * 当前剩余容量，并不一定居然价值，因为多线程模型下查询容器的当前大小，它反映的总是一个旧值。
      * Get the remaining capacity for this sequencer.
      *
      * @return The number of slots remaining.
