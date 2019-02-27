@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * WorkPool整体表示一个消费者，当handler处理较慢，但是可以并发执行时，可以采用WorkPool提升消费速度。
- * (每一个handler都会有一个单独的线程，这些handler共同完成事件处理，每一个事件之后被某一个handler处理)
+ * (每一个handler都会有一个单独的线程，这些handler共同完成事件处理，每一个事件只会被其中某一个handler处理)
  *
  * WorkerPool contains a pool of {@link WorkProcessor}s that will consume sequences so jobs can be farmed out across a pool of workers.
  * Each of the {@link WorkProcessor}s manage and calls a {@link WorkHandler} to process the events.

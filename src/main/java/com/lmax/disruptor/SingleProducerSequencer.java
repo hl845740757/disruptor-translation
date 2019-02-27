@@ -41,7 +41,7 @@ abstract class SingleProducerSequencerFields extends SingleProducerSequencerPad
     }
 
     /**
-	 * 已分配的空间序号缓存，因为是单线程的生产者，不存在竞争，因此采用普通的long变量
+	 * 本次预分配的\序号缓存，因为是单线程的生产者，不存在竞争，因此采用普通的long变量
 	 * 减少对volatile变量的读写操作。{@link #cursor}
 	 *
 	 * 会在{@link SingleProducerSequencer#tryNext(int)}
@@ -117,6 +117,9 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
 
         if (wrapPoint > cachedGatingSequence || cachedGatingSequence > nextValue)
         {
+			// 插入StoreLoad内存屏障/栅栏，保证可见性。
+			// 因为publish使用的是set /putOrderLong，并不保证其他消费者能看见发布的数据
+			// 当我再次申请更多的空间时，必须保证消费者能消费发布的数据
             if (doStore)
             {
                 cursor.setVolatile(nextValue);  // StoreLoad fence
@@ -161,17 +164,16 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
 		// 包点？构成环路的点：环形缓冲区可能追尾的点 = 等于本次申请的序号-环形缓冲区大小
 		// 如果该序号大于最慢消费者的进度，那么表示需要等待
 		long wrapPoint = nextSequence - bufferSize;
-		// 上次缓存的最小网关序号(消费最慢的消费者的进度)(会在多个地方更新)
+		// 上次缓存的最小网关序号(消费最慢的消费者的进度)
         long cachedGatingSequence = this.cachedValue;
 
 		// wrapPoint > cachedGatingSequence 表示生产者追上消费者产生环路，上次看见的序号缓存无效，还需要更多的空间
 		// cachedGatingSequence > nextValue 表示消费者的进度大于生产者进度，nextValue无效，单生产者下好像不可能啊？
-
 		if (wrapPoint > cachedGatingSequence || cachedGatingSequence > nextValue)
         {
-			// cachedGatingSequence > nextValue
-
-			// 插入StoreLoad内存屏障/栅栏，保证可见性。允许消费者线程看见上一次发布的数据
+			// 插入StoreLoad内存屏障/栅栏，保证可见性。
+			// 因为publish使用的是set /putOrderLong，并不保证其他消费者能看见发布的数据
+			// 当我再次申请更多的空间时，必须保证消费者能消费发布的数据
 			cursor.setVolatile(nextValue);  // StoreLoad fence
 
             long minSequence;
@@ -186,8 +188,8 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
 			// 比如：我可能需要一个插槽位置，结果突然直接消费者们让出来3个插槽位置
             this.cachedValue = minSequence;
         }
-
-        // 这里只写了缓存，并未写volatile变量，即不保证所有消费
+        // 这里只写了缓存，并未写volatile变量，因为只是预分配了空间但是并未被发布数据，不需要让其他消费者感知到。
+		// 消费者只会感知到真正被发布的序号
         this.nextValue = nextSequence;
 
         return nextSequence;
@@ -254,6 +256,7 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
     public void publish(long sequence)
     {
     	// 更新发布进度，使用的是set，并没有保证对其他线程立即可见
+		// 在下一次申请更多的空间时，如果发现需要消费者加快消费，则必须保证数据对消费者可见
         cursor.set(sequence);
         // 唤醒阻塞的消费者们(事件处理器们)
         waitStrategy.signalAllWhenBlocking();
