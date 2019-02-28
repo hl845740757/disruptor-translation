@@ -14,6 +14,17 @@ interface ConsumerInfo
 	 * 获取消费者拥有的所有的序列，消费者的消费进度由最小的Sequence决定
 	 * 一个消费者可能有多个Sequence，它的好处在于可以保持简单性，减少使用同一个Sequence的交互/竞争。
 	 * eg:WorkPool构成的消费者就有多个Sequence
+	 *
+	 * 消费者之间的可见性保证：
+	 * 后继消费者观察其前驱消费者的进度来保证可见性。
+	 * Sequence是单调递增的，当看见前驱消费者的进度增大时，所有前驱消费者对区间段内的数据的处理对后置消费者来说都是可见的。
+	 * volatile的happens-before原则-----前驱消费者们的进度变大(写volatile)先于我看见它变大(读volatile)。
+	 *
+	 * 注意：相同的可见性策略---与Sequence之间交互的消费者之间的可见性保证。
+	 * {@link com.lmax.disruptor.AbstractSequencer#gatingSequences}
+	 *
+	 * {@link com.lmax.disruptor.Sequencer#getHighestPublishedSequence(long, long)}
+	 *
 	 * @return
 	 */
     Sequence[] getSequences();
