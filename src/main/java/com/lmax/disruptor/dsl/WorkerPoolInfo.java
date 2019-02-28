@@ -16,7 +16,7 @@ class WorkerPoolInfo<T> implements ConsumerInfo
 	 */
     private final WorkerPool<T> workerPool;
 	/**
-	 * 消费者对应的序列屏障
+	 * 消费者对应的序列屏障，屏障用于协调与生产者或其他消费者之间的速度和保证可见性
 	 */
 	private final SequenceBarrier sequenceBarrier;
 	/**

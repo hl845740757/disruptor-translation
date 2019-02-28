@@ -20,7 +20,9 @@ package com.lmax.disruptor;
  * 序号屏障（协调屏障）：
  * 通过跟踪生产者的cursor 和 当前事件处理器依赖的的sequence(dependentSequence/traceSequences)，来协调对共享数据结构的访问。
  *
- * 依赖的的sequence： 当前EventProcessor所属的消费者依赖的所有消费者的进度。
+ * 主要目的：
+ * 1.协调 消费者与生产者 和 消费者与消费者之间 的速度
+ * 2.保证 消费者与生产者 和 消费者与消费者之间 之间的可见性
  *
  * Coordination barrier for tracking the cursor for publishers and sequence of
  * dependent {@link EventProcessor}s for processing a data structure
@@ -33,7 +35,7 @@ public interface SequenceBarrier
      * Wait for the given sequence to be available for consumption.
      *
      * @param sequence to wait for 事件处理器期望消费的下一个序号
-     * @return the sequence up to which is available 可消费的最大序号
+     * @return the sequence up to which is available 看见的最大进度(不一定可消费)
      * @throws AlertException       if a status change has occurred for the Disruptor
      * @throws InterruptedException if the thread needs awaking on a condition variable.
      * @throws TimeoutException     if a timeout occurs while waiting for the supplied sequence.

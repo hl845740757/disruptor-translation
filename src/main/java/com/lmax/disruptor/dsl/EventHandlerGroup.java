@@ -58,6 +58,7 @@ public class EventHandlerGroup<T>
 	 * 也就是EventHandlerGroup的所有EventHandler的后继消费者的依赖Sequences
 	 *
 	 * 其它代码里面的 dependentSequence / barrierSequences / sequencesToTrack 其实就是它啦。
+	 * 用于保证消费者之间的可见性{@link ConsumerInfo#getSequences()}
 	 */
     private final Sequence[] sequences;
 

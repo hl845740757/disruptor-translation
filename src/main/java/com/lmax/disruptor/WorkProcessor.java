@@ -56,6 +56,8 @@ public final class WorkProcessor<T> implements EventProcessor {
 	private final ExceptionHandler<? super T> exceptionHandler;
 	/**
 	 * WorkProcessor所属的消费者的进度信息
+	 * 每消费一个事件之后需要同步到所属的WorkerPool中的(更新其所属的消费者的进度)
+	 * {@link WorkerPool#workSequence}
 	 */
     private final Sequence workSequence;
 
@@ -135,20 +137,26 @@ public final class WorkProcessor<T> implements EventProcessor {
         {
             throw new IllegalStateException("Thread is already running");
         }
+        // 清除特定状态(可理解为清除线程的中断状态)
         sequenceBarrier.clearAlert();
 
         notifyStart();
 
+        // 是否处理了一个事件，当处理了一个事件只会需要再次竞争编号，进行下次消费
         boolean processedSequence = true;
+        // 看见的已发布序号的缓存，注意！这里是局部变量，在该变量上无竞争
         long cachedAvailableSequence = Long.MIN_VALUE;
+        // 下一个要消费的序号(要消费的事件编号)，注意起始为-1 ，注意与BatchEventProcessor的区别
+		// BatchEventProcessor初始值为 sequence.get()+1
         long nextSequence = sequence.get();
+        // 要消费的事件对象
         T event = null;
         while (true)
         {
             try
             {
 				// 首先和workSequence同步进度，然后尝试消费下一个序号，也就是workProcessor的进度最终不会低于整体的进度。
-				// 当WorkHandler抛出异常，这可以防止序列变得太远
+				// 当WorkHandler抛出异常时，这可以防止序列增加的太大
 
                 // if previous sequence was processed - fetch the next sequence and set
                 // that we have successfully processed the previous sequence
@@ -158,7 +166,7 @@ public final class WorkProcessor<T> implements EventProcessor {
                 if (processedSequence)
                 {
                     processedSequence = false;
-					// 无锁的CAS
+					// 竞争下一个消费序号
                     do
                     {
                     	// 存为local variable 减少大量的volatile变量读，且保证操作过程中的一致性
@@ -167,6 +175,8 @@ public final class WorkProcessor<T> implements EventProcessor {
                         sequence.set(nextSequence - 1L);
                     }
                     while (!workSequence.compareAndSet(nextSequence - 1L, nextSequence));
+                    // while 还没处理过事件，那么第一次更新是干嘛？
+					// 是将进度从-1更新到0表示开始，-1是不需要消费的
                 }
 
                 // 每次只处理一个事件，和 BatchEventProcessor有区别,因为WorkPool代表的消费者中可能有多个事件处理器，他们会竞争序号。
