@@ -32,6 +32,9 @@ public interface Sequencer extends Cursored, Sequenced
 
     /**
 	 * 将生产者的序号(光标)移动到指定位置.（仅在初始化RingBuffer时使用）
+	 * 注意：这是个很危险的方法，不要在运行期间执行，存在生产者与生产者竞争和生产者与消费者竞争，
+	 * 可能造成数据丢失，各种运行异常，仅能在初始化阶段使用，目前已不需要使用。
+	 * 现在默认的初始化都是使用的{@link #INITIAL_CURSOR_VALUE}）
 	 *
      * Claim a specific sequence.  Only used if initialising the ring buffer to
      * a specific value.
@@ -41,7 +44,8 @@ public interface Sequencer extends Cursored, Sequenced
     void claim(long sequence);
 
     /**
-	 * 指定序号的数据是否可用(是否已发布)
+	 * 指定序号的数据是否可用(是否已发布)。
+	 *
      * Confirms if a sequence is published and the event is available for use; non-blocking.
      *
      * @param sequence of the buffer to check

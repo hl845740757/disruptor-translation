@@ -145,6 +145,8 @@ public final class MultiProducerSequencer extends AbstractSequencer
     @Override
     public void claim(long sequence)
     {
+    	// 因为多生产者模式下，预分配空间是直接操作的cursor，因此直接设置cursor
+		// 这里可能导致 gatingSequenceCache > cursor
         cursor.set(sequence);
     }
 

@@ -53,11 +53,12 @@ public abstract class AbstractSequencer implements Sequencer
 	 */
 	protected final Sequence cursor = new Sequence(Sequencer.INITIAL_CURSOR_VALUE);
 	/**
-	 * 网关Sequences，表示序号生成器必须和这些Sequence满足约束。
-	 * 只有当所有的gatingSequences让出下一个插槽后，生产者才能获取该插槽。
+	 * 网关Sequences，序号生成器必须和这些Sequence满足约束:
+	 * cursor-bufferSize <= Min(gatingSequence)
+	 * 即：所有的gatingSequences让出下一个插槽后，生产者才能获取该插槽。
 	 *
 	 * 对于生产者来讲，它只需要关注消费链最末端的消费者的进度（因为它们的进度是最慢的）。
-	 * 即：gatingSequences就是所有消费链末端的消费们所拥有的的Sequence。
+	 * 即：gatingSequences就是所有消费链末端的消费们所拥有的的Sequence。（想一想食物链）
 	 *
 	 * 类似{@link ProcessingSequenceBarrier#dependentSequence}
 	 */
