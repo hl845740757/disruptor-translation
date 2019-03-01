@@ -57,7 +57,7 @@ public final class WorkProcessor<T> implements EventProcessor {
 	 */
 	private final ExceptionHandler<? super T> exceptionHandler;
 	/**
-	 * WorkProcessor所属的消费者的进度信息
+	 * WorkerPool中的 workProcessor竞争通信的媒介。
 	 * 详见：{@link WorkerPool#workSequence}
 	 */
     private final Sequence workSequence;
@@ -129,13 +129,16 @@ public final class WorkProcessor<T> implements EventProcessor {
     }
 
     /**
-     * It is ok to have another thread re-run this method after a halt().
-     *
+	 * 暂停之后交给下一个线程运行是线程安全的
+	 *
+	 * It is ok to have another thread re-run this method after a halt().
+	 *
      * @throws IllegalStateException if this processor is already running
      */
     @Override
     public void run()
     {
+    	// CAS操作保证只有一个线程能运行，和保证可见性（看见状态为false后于前一个线程将其设置为false）
         if (!running.compareAndSet(false, true))
         {
             throw new IllegalStateException("Thread is already running");
@@ -179,12 +182,13 @@ public final class WorkProcessor<T> implements EventProcessor {
                     }
                     while (!workSequence.compareAndSet(nextSequence - 1L, nextSequence));
                     // CAS更新workSequence的序号(预分配序号)，为什么这样是安全的呢？
-					// 由于消费者的进度由最小的Sequence决定，总有一个WorkProcessor的Sequence处于正确的位置(最慢的进度)，
-					// 因此 workSequence 的更新并不会影响WorkerPool代表的消费者的消费进度。
+					// 由于消费者的进度由最小的Sequence决定，当它CAS更新workSequence之后，它代替了workSequence处在旧的进度上。
+					// 就算多个workProcessor竞争，总有一个是处在正确的进度上的。
+					// 由于消费者的进度由最小的Sequence决定，因此 workSequence 的更新并不会影响WorkerPool代表的消费者的消费进度。
                 }
 
-                // 每次只处理一个事件，和 BatchEventProcessor有区别,因为WorkPool代表的消费者中可能有多个事件处理器，他们会竞争序号。
-				// 每次竞争一个序号，因此每次只消费一个
+				// 它只能保证竞争到的序号是可用的，因此只能只消费一个。
+				// 而BatchEventProcessor看见的所有序号都是可用的
                 if (cachedAvailableSequence >= nextSequence)
                 {
                     event = ringBuffer.get(nextSequence);
@@ -220,6 +224,7 @@ public final class WorkProcessor<T> implements EventProcessor {
 
         notifyShutdown();
 
+        // 写volatile，插入StoreLoad屏障，保证其他线程能看见我退出前的所有操作
         running.set(false);
     }
 

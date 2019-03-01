@@ -12,7 +12,7 @@ interface ConsumerInfo
 {
 	/**
 	 * 获取消费者拥有的所有的序列，消费者的消费进度由最小的Sequence决定
-	 * 一个消费者可能有多个Sequence，可以保持简单性，对多线程的消费者有重要意义(WorkerPool中)。
+	 * 一个消费者可能有多个Sequence，在某些时候可以保持简单性，对多线程的消费者有重要意义(WorkerPool中)。
 	 * @see com.lmax.disruptor.WorkerPool
 	 *
 	 * 消费者之间的可见性保证：

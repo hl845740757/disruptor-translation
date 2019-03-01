@@ -34,16 +34,21 @@ public final class WorkerPool<T>
     private final AtomicBoolean started = new AtomicBoolean(false);
 
 	/**
-	 * 消费者的进度取决于最小的Sequence。
-	 * 每一个WorkProcessor都有一个Sequence，根据WorkProcessor的Sequence是可以得到消费者的进度的。
+	 * 消费者的进度取决于最小的Sequence。每一个WorkProcessor都有一个Sequence，根据WorkProcessor的Sequence可以得到消费者的进度。
 	 *
-	 * 1.那WorkerPool还带一个Sequence干嘛呢？
-	 * 答案：用于为多个WorkProcessor预分配序号，保证安全性。
-	 * 由于消费者的进度由最小的Sequence决定，总有一个WorkProcessor的Sequence处于正确的位置(最慢的进度)，
-	 * 因此 workSequence 的更新并不会影响WorkerPool代表的消费者的消费进度。
-	 * WorkProcessor首先与workSequence同步，然后CAS操作请求分配一个序号，最后才准备消费对应序号的数据。
+	 * 1.那么问题来了，WorkerPool还带一个Sequence干嘛呢？
+	 * 答案：是WorkProcessor竞争通信的媒介！预分配(抢占)序号用的，竞争成功表示告诉其他workProcessor去消费下一个序号。
+	 * workSequence总是大于workProcessors的sequence的，因此它并不代表消费者的进度。workSequence甚至可能大于生产者的生产进度。
 	 *
-	 * 2.WorkerPool中最少有两个Sequence，WorkProcessor 和 WorkerPool各带一个。
+	 * WorkProcessor首先与workSequence同步，然后CAS更新workSequence (+1)。
+	 * 更新成功之后，workProcessor的进度处在workSequence更新之前进度上，就算有多个WorkProcessor进行了预分配，
+	 * 总有一个WorkProcessor的Sequence处于正确的进度。由于消费者的进度由最小的Sequence决定，
+	 * 因此workSequence的预分配更新并不会影响WorkerPool代表的消费者的消费进度。
+	 *
+	 * 2.预分配序号时+1的意义？
+	 * 保证了WorkerPool代表的消费者的进度是1格1格前进的，且尽可能的使所有的线程都在处理事件(保证执行效率)。
+	 *
+	 * 3.WorkerPool中最少有两个Sequence，WorkProcessor 和 WorkerPool各带一个。
 	 */
 	private final Sequence workSequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE);
 

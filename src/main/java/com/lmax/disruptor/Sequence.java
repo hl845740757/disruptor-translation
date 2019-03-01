@@ -155,7 +155,7 @@ public class Sequence extends RhsPadding
     }
 
     /**
-	 * 原子方式增加序号
+	 * 原子方式增加序号，对哦现在的代码里还没用到。。
      * Atomically increment the sequence by one.
      *
      * @return The value after the increment
