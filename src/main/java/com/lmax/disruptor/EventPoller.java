@@ -19,7 +19,7 @@ public class EventPoller<T>
 	 */
 	private final Sequence sequence;
 	/**
-	 * 依赖的序号
+	 * 依赖的序号，我的sequence必须小于gatingSequence
 	 */
     private final Sequence gatingSequence;
 

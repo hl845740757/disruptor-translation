@@ -19,7 +19,10 @@ package com.lmax.disruptor;
 import com.lmax.disruptor.util.ThreadHints;
 
 /**
- * 自旋等待策略(空循环)
+ * 该策略使用自旋(空循环)来在barrier上等待。
+ * 该策略通过占用CPU资源去比避免系统调用带来的延迟抖动。最好在线程能绑定到特定的CPU核心时使用。
+ * (会持续占用CPU资源，基本不会让出CPU资源)
+ *
  * Busy Spin strategy that uses a busy spin loop for {@link com.lmax.disruptor.EventProcessor}s waiting on a barrier.
  * <p>
  * This strategy will use CPU resource to avoid syscalls which can introduce latency jitter.  It is best

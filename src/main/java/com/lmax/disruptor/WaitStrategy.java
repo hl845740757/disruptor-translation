@@ -50,9 +50,10 @@ public interface WaitStrategy
 	 *                          但是如果要实现生产者与消费者(或者说事件处理器)的等待通知协议时，需要cursor对象作为锁对象。
 	 *
      * @param dependentSequence on which to wait.
-	 *                          这是我真正等待的序列，当该序列的序号大于我需要的序列时，该序号就可以消费了。
-	 *
-     * @param barrier           the processor is waiting on.
+	 *                          在这个Sequence上等待，直到它我大于期望的序号。什么的dependentSequence?
+	 *                          {@link com.lmax.disruptor.ProcessingSequenceBarrier#dependentSequence}
+     *
+	 * @param barrier           the processor is waiting on.
 	 *                          事件处理器关联(绑定)的序列屏障,一个EventProcessor只关联一个SequenceBarrier。
 	 *
      * @return the sequence that is available which may be greater than the requested sequence.

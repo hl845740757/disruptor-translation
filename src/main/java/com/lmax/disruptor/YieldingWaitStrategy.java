@@ -17,6 +17,9 @@ package com.lmax.disruptor;
 
 
 /**
+ * 该策略在尝试一定次数的自旋等待(空循环)之后使用尝试让出cpu。
+ * 该策略将会占用大量的CPU资源(100%)，但是比{@link BusySpinWaitStrategy}策略更容易在其他线程需要CPU时让出CPU。
+ *
  * Yielding strategy that uses a Thread.yield() for {@link com.lmax.disruptor.EventProcessor}s waiting on a barrier
  * after an initially spinning.
  * <p>
@@ -33,11 +36,13 @@ public final class YieldingWaitStrategy implements WaitStrategy
         throws AlertException, InterruptedException
     {
         long availableSequence;
+        // 自旋尝试次数
         int counter = SPIN_TRIES;
 
         while ((availableSequence = dependentSequence.get()) < sequence)
         {
-            counter = applyWaitMethod(barrier, counter);
+			// 当依赖的sequence还未完成对应序号的事件消费时，执行等待方法
+			counter = applyWaitMethod(barrier, counter);
         }
 
         return availableSequence;
@@ -53,12 +58,14 @@ public final class YieldingWaitStrategy implements WaitStrategy
     {
         barrier.checkAlert();
 
+        // 当计数变为0时尝试让出CPU资源，避免大量占用CPU资源
         if (0 == counter)
         {
             Thread.yield();
         }
         else
         {
+        	// 当计数大于0时，空循环。(有最高的响应性，但是对CPU占用太高)
             --counter;
         }
 

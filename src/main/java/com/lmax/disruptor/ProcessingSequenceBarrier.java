@@ -42,7 +42,8 @@ final class ProcessingSequenceBarrier implements SequenceBarrier
 	private final WaitStrategy waitStrategy;
 	/**
 	 * 依赖的Sequence。
-	 * EventProcessor(事件处理器)只能处理它依赖的Sequence已经处理的序号。
+	 * EventProcessor(事件处理器)的Sequence必须小于等于依赖的Sequence
+	 * 来自于{@link com.lmax.disruptor.dsl.EventHandlerGroup#sequences}
 	 *
 	 * 对于直接和Sequencer相连的消费者，它依赖的Sequence就是Sequencer的Sequence。
 	 * 对于跟在其它消费者屁股后面的消费者，它依赖的Sequence就是它跟随的所有消费者的Sequence。

@@ -41,7 +41,9 @@ public final class FixedSequenceGroup extends Sequence
     }
 
     /**
-     * Get the minimum sequence value for the group.
+	 * 一组Sequence的进度就是Sequence最小的那个
+     *
+	 * Get the minimum sequence value for the group.
      *
      * @return the minimum sequence value for the group.
      */

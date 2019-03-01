@@ -92,7 +92,9 @@ public interface Sequencer extends Cursored, Sequenced
     SequenceBarrier newBarrier(Sequence... sequencesToTrack);
 
     /**
-	 * 获取序号生成器(Sequencer自身)和 所有追踪的消费者们的进度信息中的最小序号
+	 * 获取序号生成器(Sequencer自身)和 所有追踪的消费者们的进度信息中的最小序号。
+	 * 当没有网关时，生产者的序列就是网关序列，返回生产者的进度值。
+	 *
      * Get the minimum sequence value from all of the gating sequences
      * added to this ringBuffer.
      *

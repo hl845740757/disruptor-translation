@@ -22,7 +22,6 @@ import com.lmax.disruptor.ExceptionHandler;
 
 /**
  * 为EventHandler绑定异常处理的对象。
- * 做流式语法调用还是蛮费劲的哈。。
  *
  * A support class used as part of setting an exception handler for a specific event handler.
  * For example:

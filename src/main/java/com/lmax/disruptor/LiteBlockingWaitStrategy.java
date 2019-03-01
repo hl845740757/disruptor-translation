@@ -45,7 +45,7 @@ public final class LiteBlockingWaitStrategy implements WaitStrategy
             {
                 do
                 {
-                	// 在这里做了一些优化，减少等待次数
+                	// 在这里做了一些优化，只有真正有线程等待时，才需要通知
                     signalNeeded.getAndSet(true);
 
                     if (cursorSequence.get() >= sequence)
@@ -53,6 +53,7 @@ public final class LiteBlockingWaitStrategy implements WaitStrategy
                         break;
                     }
 
+                    // 可理解为，在执行耗时操作之前检查中断(提高中断响应性)
                     barrier.checkAlert();
                     mutex.wait();
                 }

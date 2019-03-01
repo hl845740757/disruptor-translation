@@ -84,11 +84,12 @@ public class Disruptor<T>
 	 */
 	private final ConsumerRepository<T> consumerRepository = new ConsumerRepository<>();
 	/**
-	 * 运行状态
+	 * 运行状态标记
 	 */
 	private final AtomicBoolean started = new AtomicBoolean(false);
 	/**
-	 * 异常处理器
+	 * EventHandler的异常处理器。
+	 * 警告！！！默认的异常处理器在EventHandler抛出异常时会终止EventProcessor的线程(退出任务)。
 	 */
     private ExceptionHandler<? super T> exceptionHandler = new ExceptionHandlerWrapper<>();
 
@@ -503,8 +504,10 @@ public class Disruptor<T>
     }
 
     /**
-	 * 关闭Disruptor 知道所有的事件处理器停止。(处理器会在处理完所有事件之后停止)
-	 * 必须保证已经停止发布数据。
+	 * 关闭Disruptor 直到所有的事件处理器停止。(必须保证已经停止向ringBuffer发布数据)
+	 *
+	 * 本方法不会关闭executor，也不会等待所有的eventProcessor的线程进入终止状态。
+	 * 事件处理完，线程不一定退出了，（比如线程可能存在二阶段终止模式）
 	 *
      * <p>Waits until all events currently in the disruptor have been processed by all event processors
      * and then halts the processors.  It is critical that publishing to the ring buffer has stopped
@@ -526,6 +529,10 @@ public class Disruptor<T>
     }
 
     /**
+	 * 关闭disruptor，直到所有事件处理完或超时。
+	 * 本方法不会关闭executor，也不会等待所有的eventProcessor的线程进入终止状态。
+	 * 事件处理完，线程不一定退出了，（比如线程可能存在二阶段终止模式）
+	 *
      * <p>Waits until all events currently in the disruptor have been processed by all event processors
      * and then halts the processors.</p>
      *
@@ -562,6 +569,8 @@ public class Disruptor<T>
     }
 
     /**
+	 * 获取生产者的进度(sequence/cursor)
+	 *
      * Get the value of the cursor indicating the published sequence.
      *
      * @return value of the cursor for events that have been published.
@@ -572,6 +581,8 @@ public class Disruptor<T>
     }
 
     /**
+	 * 获取缓冲区大小
+	 *
      * The capacity of the data structure to hold entries.
      *
      * @return the size of the RingBuffer.
@@ -583,6 +594,8 @@ public class Disruptor<T>
     }
 
     /**
+	 * 从ringBuffer取出指定序列的事件对象
+	 *
      * Get the event for a given sequence in the RingBuffer.
      *
      * @param sequence for the event.
@@ -701,7 +714,7 @@ public class Disruptor<T>
     }
 
 	/**
-	 * {@link #createEventProcessors(Sequence[], EventHandler[])}
+	 * 注释详见{@link #createEventProcessors(Sequence[], EventHandler[])}
 	 *
 	 * @param barrierSequences
 	 * @param processorFactories
@@ -723,7 +736,7 @@ public class Disruptor<T>
 	/**
 	 * 创建一个多线程的消费者，消费者的线程数取决于workHandler的数量
 	 *
-	 * @param barrierSequences WorkPool消费者的所有前驱节点的序列，作为新消费者的网关序列
+	 * @param barrierSequences WorkPool消费者的所有前驱节点的序列，作为新消费者的依赖序列
 	 * @param workHandlers 线程池中处理事件的单元，每一个都会包装为{@link com.lmax.disruptor.WorkProcessor}，
 	 *                        数组长度决定线程的数量。
 	 *                        如果这些语法觉得有点奇怪的是正常的，为了更好的灵活性，比传数量会好一些
@@ -745,7 +758,10 @@ public class Disruptor<T>
         return new EventHandlerGroup<>(this, consumerRepository, workerSequences);
     }
 
-    private void checkNotStarted()
+	/**
+	 * 确保disruptor还未启动
+	 */
+	private void checkNotStarted()
     {
         if (started.get())
         {
@@ -753,7 +769,10 @@ public class Disruptor<T>
         }
     }
 
-    private void checkOnlyStartedOnce()
+	/**
+	 * 确保disruptor只启动一次
+	 */
+	private void checkOnlyStartedOnce()
     {
         if (!started.compareAndSet(false, true))
         {

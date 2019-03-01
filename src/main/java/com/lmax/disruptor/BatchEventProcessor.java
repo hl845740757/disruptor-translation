@@ -192,7 +192,7 @@ public final class BatchEventProcessor<T>
     {
         T event = null;// 减少变量定义
         // 下一个消费的序号， -1 到 0，这个很重要，对于理解 WorkProcessor有帮助
-		// -1是不需要消费的
+		// -1是不需要消费的，第一个要消费的是0
         long nextSequence = sequence.get() + 1L;
 
         // 死循环，因此不会让出线程，需要独立的线程(每一个EventProcessor都需要独立的线程)

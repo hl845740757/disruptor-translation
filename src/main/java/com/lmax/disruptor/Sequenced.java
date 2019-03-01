@@ -1,7 +1,7 @@
 package com.lmax.disruptor;
 
 /**
- * 可顺序操作的数据结构
+ * 定义了一个与Sequence关联的数据结构
  * 申请空间之后，必须使用对应的发布方法，发布数据(表示这些空间的数据已经可用)
  * {@link #next()} {@link #tryNext()} ---> {@link #publish(long)}
  * {@link #next(int)} {@link #tryNext(int)} ---> {@link #publish(long, long)}

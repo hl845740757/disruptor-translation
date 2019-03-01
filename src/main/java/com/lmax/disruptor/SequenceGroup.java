@@ -53,7 +53,8 @@ public final class SequenceGroup extends Sequence
     }
 
     /**
-	 * 将所有的Sequence设置到同一个进度
+	 * 将所有的Sequence设置到同一个进度。
+	 * 所有！所有！所有！
      * Set all {@link Sequence}s in the group to a given value.
      *
      * @param value to set the group of sequences to.

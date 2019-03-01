@@ -21,8 +21,9 @@ package com.lmax.disruptor;
  * 通过跟踪生产者的cursor 和 当前事件处理器依赖的的sequence(dependentSequence/traceSequences)，来协调对共享数据结构的访问。
  *
  * 主要目的：
- * 1.协调 消费者与生产者 和 消费者与消费者之间 的速度
- * 2.保证 消费者与生产者 和 消费者与消费者之间 之间的可见性
+ * 1.协调 消费者与生产者 和 消费者与消费者之间 的速度 (进度控制)
+ * 2.保证 消费者与生产者 和 消费者与消费者之间 之间的可见性 (读写volatile变量实现的)
+ *
  *
  * Coordination barrier for tracking the cursor for publishers and sequence of
  * dependent {@link EventProcessor}s for processing a data structure

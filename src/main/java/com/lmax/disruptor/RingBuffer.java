@@ -417,6 +417,8 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 添加追踪的序列(消费链末端的消费者的序列)
+	 *
      * Add the specified gating sequences to this instance of the Disruptor.  They will
      * safely and atomically added to the list of gating sequences.
      *
@@ -428,6 +430,9 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 获取最小网关序列，当没有网关时，生产者的序列就是网关
+	 * @see Sequencer#getMinimumSequence()
+	 *
      * Get the minimum sequence value from all of the gating sequences
      * added to this ringBuffer.
      *
@@ -440,6 +445,8 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 删除网关序列(该序列代表的消费者不再是消费链末端的消费者了)
+	 *
      * Remove the specified sequence from this ringBuffer.
      *
      * @param sequence to be removed.
@@ -466,6 +473,7 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 创建一个依赖指定Sequence的事件轮询器
      * Creates an event poller for this ring buffer gated on the supplied sequences.
      *
      * @param gatingSequences to be gated on.
@@ -477,6 +485,8 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 获取ring的游标，它真正的值依赖于它使用的Sequencer。
+	 *
      * Get the current cursor value for the ring buffer.  The actual value received
      * will depend on the type of {@link Sequencer} that is being used.
      *
@@ -523,6 +533,7 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
 	// ---------------------------后面的所有的publishEvent都是表示基于数据传输对象(TO)发布数据，不详细解释了---------------
+	// 真的佩服。。。写这么多发布事件方法
 
     /**
      * @see com.lmax.disruptor.EventSink#publishEvent(com.lmax.disruptor.EventTranslator)

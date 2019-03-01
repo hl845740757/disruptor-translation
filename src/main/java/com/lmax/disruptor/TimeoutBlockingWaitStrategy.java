@@ -41,7 +41,7 @@ public class TimeoutBlockingWaitStrategy implements WaitStrategy
             {
                 while (cursorSequence.get() < sequence)
                 {
-					// 类似在执行耗时方法之前，检查中断标记。提高响应性
+					// 类似在执行耗时方法之前，检查中断标记(提高中断响应性)
                     barrier.checkAlert();
                     timeoutNanos = awaitNanos(mutex, timeoutNanos);
                     if (timeoutNanos <= 0)

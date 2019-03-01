@@ -132,7 +132,6 @@ public abstract class AbstractSequencer implements Sequencer
     }
 
     /**
-	 * 获取所有序号中的最小序号(生产者+消费者)，这是一个支持测试的方法
      * @see Sequencer#getMinimumSequence()
      */
     @Override

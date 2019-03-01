@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static com.lmax.disruptor.util.Util.awaitNanos;
 
 /**
- * 更轻量的阻塞等待策略
+ * 更轻量的超时阻塞等待策略
  * 注释可参考{@link TimeoutBlockingWaitStrategy}
  *
  * Variation of the {@link TimeoutBlockingWaitStrategy} that attempts to elide conditional wake-ups

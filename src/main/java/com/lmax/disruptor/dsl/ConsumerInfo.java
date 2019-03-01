@@ -31,11 +31,7 @@ interface ConsumerInfo
 
 	/**
 	 * 获取当前消费者持有的序列屏障
-	 *
-	 * 每一个消费者有且仅有一个Barrier屏障，该屏障用于协调当前消费者与它依赖的Sequence所属的消费者们之间的速度。
-	 * 消费者依赖的Sequence使指它的所有直接前驱节点的Sequence。
-	 *
-	 * 什么是消费者依赖的Sequence？ {@link com.lmax.disruptor.ProcessingSequenceBarrier#dependentSequence}
+	 * 其作用详见{@link SequenceBarrier}
 	 *
 	 * {@link com.lmax.disruptor.Sequencer#newBarrier(Sequence...)}
 	 * @return
