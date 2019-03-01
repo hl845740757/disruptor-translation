@@ -51,17 +51,20 @@ public final class WorkProcessor<T> implements EventProcessor {
 	 */
     private final WorkHandler<? super T> workHandler;
 	/**
-	 * workProcessor绑定的异常处理器
+	 * workProcessor绑定的异常处理器，
+	 * 警告！！！
+	 * 默认的异常处理器{@link com.lmax.disruptor.dsl.Disruptor#exceptionHandler}，出现异常时会打断运行
 	 */
 	private final ExceptionHandler<? super T> exceptionHandler;
 	/**
 	 * WorkProcessor所属的消费者的进度信息
-	 * 每消费一个事件之后需要同步到所属的WorkerPool中的(更新其所属的消费者的进度)
-	 * {@link WorkerPool#workSequence}
+	 * 详见：{@link WorkerPool#workSequence}
 	 */
     private final Sequence workSequence;
-
-    private final EventReleaser eventReleaser = new EventReleaser()
+	/**
+	 * 事件释放器，自身不再消费
+	 */
+	private final EventReleaser eventReleaser = new EventReleaser()
     {
         @Override
         public void release()
@@ -142,12 +145,13 @@ public final class WorkProcessor<T> implements EventProcessor {
 
         notifyStart();
 
-        // 是否处理了一个事件，当处理了一个事件只会需要再次竞争编号，进行下次消费
+        // 是否处理了一个事件。在处理完一个事件之后会再次竞争序号进行消费
         boolean processedSequence = true;
         // 看见的已发布序号的缓存，注意！这里是局部变量，在该变量上无竞争
         long cachedAvailableSequence = Long.MIN_VALUE;
         // 下一个要消费的序号(要消费的事件编号)，注意起始为-1 ，注意与BatchEventProcessor的区别
 		// BatchEventProcessor初始值为 sequence.get()+1
+		// 存为local variable 还减少大量的volatile变量读，且保证本次操作过程中的一致性
         long nextSequence = sequence.get();
         // 要消费的事件对象
         T event = null;
@@ -155,8 +159,9 @@ public final class WorkProcessor<T> implements EventProcessor {
         {
             try
             {
-				// 首先和workSequence同步进度，然后尝试消费下一个序号，也就是workProcessor的进度最终不会低于整体的进度。
-				// 当WorkHandler抛出异常时，这可以防止序列增加的太大
+				// 如果前一个事情被成功处理了--拉取下一个序号，并将上一个序号标记为已成功处理。
+				// 一般来说，这都是正确的。
+				// 这可以防止当workHandler抛出异常时,Sequence跨度太大。
 
                 // if previous sequence was processed - fetch the next sequence and set
                 // that we have successfully processed the previous sequence
@@ -166,17 +171,16 @@ public final class WorkProcessor<T> implements EventProcessor {
                 if (processedSequence)
                 {
                     processedSequence = false;
-					// 竞争下一个消费序号
                     do
                     {
-                    	// 存为local variable 减少大量的volatile变量读，且保证操作过程中的一致性
-						// 不存为本地变量会发生错误，每次get可能会取到的不一样，从而导致错误
-                        nextSequence = workSequence.get() + 1L;
+                    	// 获取workProcessor所属的消费者的进度，与workSequence同步(感知其他消费者的进度)
+						nextSequence = workSequence.get() + 1L;
                         sequence.set(nextSequence - 1L);
                     }
                     while (!workSequence.compareAndSet(nextSequence - 1L, nextSequence));
-                    // while 还没处理过事件，那么第一次更新是干嘛？
-					// 是将进度从-1更新到0表示开始，-1是不需要消费的
+                    // CAS更新workSequence的序号(预分配序号)，为什么这样是安全的呢？
+					// 由于消费者的进度由最小的Sequence决定，总有一个WorkProcessor的Sequence处于正确的位置(最慢的进度)，
+					// 因此 workSequence 的更新并不会影响WorkerPool代表的消费者的消费进度。
                 }
 
                 // 每次只处理一个事件，和 BatchEventProcessor有区别,因为WorkPool代表的消费者中可能有多个事件处理器，他们会竞争序号。
@@ -205,8 +209,11 @@ public final class WorkProcessor<T> implements EventProcessor {
             }
             catch (final Throwable ex)
             {
-                // handle, mark as processed, unless the exception handler threw an exception
+				// 同样的警告！如果在处理异常时抛出新的异常，会导致跳出while循环，导致WorkProcessor停止工作，可能导致死锁
+				// 而系统默认的异常处理会将其包装为RuntimeException！！！
+				// handle, mark as processed, unless the exception handler threw an exception
                 exceptionHandler.handleEventException(ex, nextSequence, event);
+                // 成功处理异常后标记当前事件已被处理
                 processedSequence = true;
             }
         }

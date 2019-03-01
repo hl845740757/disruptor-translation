@@ -174,7 +174,7 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
             throw new IllegalArgumentException("n must be > 0 and < bufferSize");
         }
 
-        // 上次分配的序号的缓存(已分配到这里)
+        // 上次分配的序号的缓存(已分配到这里) 第一个申请的空间是0
         long nextValue = this.nextValue;
 		// 本次申请分配的序号
         long nextSequence = nextValue + n;

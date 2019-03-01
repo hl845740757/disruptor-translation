@@ -32,8 +32,21 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class WorkerPool<T>
 {
     private final AtomicBoolean started = new AtomicBoolean(false);
-	// 当前消费者的消费进度
-    private final Sequence workSequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE);
+
+	/**
+	 * 消费者的进度取决于最小的Sequence。
+	 * 每一个WorkProcessor都有一个Sequence，根据WorkProcessor的Sequence是可以得到消费者的进度的。
+	 *
+	 * 1.那WorkerPool还带一个Sequence干嘛呢？
+	 * 答案：用于为多个WorkProcessor预分配序号，保证安全性。
+	 * 由于消费者的进度由最小的Sequence决定，总有一个WorkProcessor的Sequence处于正确的位置(最慢的进度)，
+	 * 因此 workSequence 的更新并不会影响WorkerPool代表的消费者的消费进度。
+	 * WorkProcessor首先与workSequence同步，然后CAS操作请求分配一个序号，最后才准备消费对应序号的数据。
+	 *
+	 * 2.WorkerPool中最少有两个Sequence，WorkProcessor 和 WorkerPool各带一个。
+	 */
+	private final Sequence workSequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE);
+
     private final RingBuffer<T> ringBuffer;
 
     // 事件处理器，每一个都是一个无限循环的任务，因此都需要独立的线程

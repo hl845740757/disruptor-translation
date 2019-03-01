@@ -50,6 +50,11 @@ public final class BatchEventProcessor<T>
 	 * 运行状态标记
 	 */
 	private final AtomicInteger running = new AtomicInteger(IDLE);
+	/**
+	 * 处理事件时的异常处理器
+	 * 警告！！！
+	 * 默认的异常处理器{@link com.lmax.disruptor.dsl.Disruptor#exceptionHandler}，在出现异常时会打断运行。
+	 */
     private ExceptionHandler<? super T> exceptionHandler = new FatalExceptionHandler();
 	/**
 	 * 数据提供者(RingBuffer)
@@ -228,8 +233,10 @@ public final class BatchEventProcessor<T>
             }
             catch (final Throwable ex)
             {
+            	// 警告！如果在处理异常时抛出新的异常，会导致跳出while循环，导致BatchEventProcessor停止工作，可能导致死锁
+				// 而系统默认的异常处理会将其包装为RuntimeException！！！
                 exceptionHandler.handleEventException(ex, nextSequence, event);
-				// 出现异常时跳过当前事件
+				// 成功处理异常后标记当前事件已被处理
 				sequence.set(nextSequence);
                 nextSequence++;
             }
