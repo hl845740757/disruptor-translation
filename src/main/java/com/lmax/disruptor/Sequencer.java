@@ -55,7 +55,7 @@ public interface Sequencer extends Cursored, Sequenced
 
     /**
 	 * 添加序号生成器需要追踪的网关Sequence（新增的末端消费者消费序列/进度），
-	 * Sequencer会持续跟踪它们的进度信息，以协调生产者和消费者之间的速度。
+	 * Sequencer（生产者）会持续跟踪它们的进度信息，以协调生产者和消费者之间的速度。
 	 * 即生产者想使用一个序号时必须等待所有的网关Sequence处理完该序号。
 	 *
 	 * Add the specified gating sequences to this instance of the Disruptor.  They will
@@ -66,7 +66,26 @@ public interface Sequencer extends Cursored, Sequenced
     void addGatingSequences(Sequence... gatingSequences);
 
     /**
-	 * 移除这些网关Sequence(消费者消费序列/进度)，不再跟踪它们的进度信息
+	 * 移除这些网关Sequence(消费者消费序列/进度)，不再跟踪它们的进度信息；
+	 * 注意：如果移除了所有的消费者，那么生产者便不会被阻塞！
+	 * 也就能{@link RingBuffer#next()} 死循环中醒来。
+	 * <p>
+	 * 2019年9月17日，最近正在纠结，如何让生产者安全的发布事件，之前使用{@link #tryNext()}，不停的重试，其实一点都不好。
+	 * 因此以前代码大概是这样的：
+	 * <pre>{@code
+	 * 	    while(!isShuttingDown()) {
+	 * 	        try {
+	 * 	        	long sequence = ringBuffer.tryNext();
+	 * 	        } catch (InsufficientCapacityException ignore) {
+	 * 	            //
+	 * 	            LockSupport.parkNanos(1);
+	 * 	        }
+	 * 	    }
+	 * }
+	 * </pre>
+	 * 而如果消费者在shutdown以后remove掉自己，那么生产者就会从{@link RingBuffer#next()}中返回！
+	 *
+	 *
      * Remove the specified sequence from this sequencer.
      *
      * @param sequence to be removed.

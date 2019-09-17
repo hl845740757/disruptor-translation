@@ -17,7 +17,7 @@ package com.lmax.disruptor;
 
 
 /**
- * 事件处理器序号屏障
+ * 消费者使用的事件处理器序号屏障
  * {@link SequenceBarrier} handed out for gating {@link EventProcessor}s on a cursor sequence
  * and optional dependent {@link EventProcessor}(s),
  * using the given WaitStrategy.
@@ -63,13 +63,14 @@ final class ProcessingSequenceBarrier implements SequenceBarrier
         this.waitStrategy = waitStrategy;
         this.cursorSequence = cursorSequence;
 
-        // 如果没有和我绑定的事件处理器，那么只需要与生产者的进度进行协调
+        // 如果消费者不依赖于其它的消费者，那么只需要与生产者的进度进行协调
         if (0 == dependentSequences.length)
         {
             dependentSequence = cursorSequence;
         }
         else
         {
+            // 如果依赖于其它消费者，那么追踪其它消费者的进度。
             dependentSequence = new FixedSequenceGroup(dependentSequences);
         }
     }
@@ -93,6 +94,7 @@ final class ProcessingSequenceBarrier implements SequenceBarrier
     @Override
     public long getCursor()
     {
+        // 这里实际返回的是依赖的生产者/消费者的进度 - 因为当依赖其它消费者时，查询生产者进度对于等待是没有意义的
         return dependentSequence.get();
     }
 
@@ -105,6 +107,7 @@ final class ProcessingSequenceBarrier implements SequenceBarrier
     @Override
     public void alert()
     {
+        // 标记为被中断，并唤醒正在等待的消费者
         alerted = true;
         waitStrategy.signalAllWhenBlocking();
     }

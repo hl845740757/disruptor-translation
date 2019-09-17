@@ -251,6 +251,16 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+     * 获取指定sequence对应的数据。
+     * 该方法由两个用途：
+     * <p>
+     *     1. 用于生产者发布数据。生产者在调用{@link #next()}{@link #tryNext()}之后，
+     *     获取事件对象，然后调用{@link #publish(long)}发布数据。
+     * <p>
+     *     2. 用于消费者消费数据，当生产者调用{@link SequenceBarrier#waitFor(long)}之后，
+     *     如果返回的sequence大于等于生产者期望的sequence，那么表示消费者可以消费这些sequence对应的数据。
+     *
+     *
      * <p>Get the event for a given sequence in the RingBuffer.</p>
      *
      * <p>This call has 2 uses.  Firstly use this call when publishing to a ring buffer.
@@ -272,6 +282,11 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+     * 获取下一个数据的索引，空间不足是会阻塞(等待)
+     * 申请完空间之后,必须使用 {@link #publish(long)} 发布，否则会导致整个数据结构不可用
+     * <p>
+     * 警告：一旦进入该方法，除非有空间，否则无法退出，连中断都没有检查 -> 即使消费者已经停止运行了，生产者也无法退出，可能导致死锁。
+     *
      * Increment and return the next sequence for the ring buffer.  Calls of this
      * method should ensure that they always publish the sequence afterward.  E.g.
      * <pre>
@@ -295,6 +310,8 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+     * 警告：一旦进入该方法，除非有空间，否则无法退出，连中断都没有检查 -> 即使消费者已经停止运行了，生产者也无法退出，可能导致死锁。
+     *
      * The same functionality as {@link RingBuffer#next()}, but allows the caller to claim
      * the next n sequences.
      *
@@ -310,8 +327,8 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
 
     /**
 	 * 尝试申请一个缓存空间(请求分配一个序号)。
-	 * 使用该方法必须保证使用对应的publish()方法发布（try-finally代码块）。示例代码段见源注释
-	 *
+	 * 使用该方法必须保证使用对应的publish()方法发布（try-finally代码块）。示例代码段见源注释。
+     * <b>使用该方法可以避免死锁</b>
 	 *
      * <p>Increment and return the next sequence for the ring buffer.  Calls of this
      * method should ensure that they always publish the sequence afterward.  E.g.</p>
@@ -340,7 +357,9 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
 
     /**
 	 *
-	 * 注释参考{@link #tryNext()}，只不过是变成了申请多个空间，批量申请空间
+	 * 注释参考{@link #tryNext()}，只不过是变成了申请多个空间，批量申请空间。
+     * <b>使用该方法可以避免死锁</b>
+     *
      * The same functionality as {@link RingBuffer#tryNext()}, but allows the caller to attempt
      * to claim the next n sequences.
      *
@@ -485,7 +504,7 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
-	 * 获取ring的游标，它真正的值依赖于它使用的Sequencer。
+	 * 获取ring的游标(生产者的最大序号)，它真正的值依赖于它使用的Sequencer。
 	 *
      * Get the current cursor value for the ring buffer.  The actual value received
      * will depend on the type of {@link Sequencer} that is being used.
@@ -512,7 +531,11 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
 	 * @see #isPublished(long) 注释参考
 	 *
 	 * 注意:存在数据竞争问题，返回值只是一个参考值，并非准确值(旧值)。
-	 * 因此不推荐使用。但是为啥未标记为 Deprecated 呢
+	 * 如果是多生产模型，即使方法返回true，{@link RingBuffer#next()}也可能会阻塞！
+     * 只有是单生产模型的时候，方法返回true时一定不会阻塞。
+     * <p>
+     * 该方法在多生产者下，检查后发布，是一个先检查后执行操作，是极度不安全的，应当使用{@link #tryNext(int)}!
+     * <p>
 	 * eg:
 	 * if(hasAvailableCapacity(x)){
 	 *     long sequence=next();// 这里还是可能阻塞，在生产者模型下，总是存在竞争问题

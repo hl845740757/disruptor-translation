@@ -38,6 +38,9 @@ public interface Sequenced
     /**
 	 * 获取下一个数据的索引，空间不足是会阻塞(等待)
 	 * 申请完空间之后,必须使用 {@link #publish(long)} 发布，否则会导致整个数据结构不可用
+     * <p>
+     * 警告：一旦进入该方法，除非有空间，否则无法退出，连中断都没有检查 -> 即使消费者已经停止运行了，生产者也无法退出，可能导致死锁。
+     *
      * Claim the next event in sequence for publishing.
      *
      * @return the claimed sequence value
@@ -47,7 +50,8 @@ public interface Sequenced
     /**
 	 * 获取接下来的n个数据的最后一个索引，空间不足是会阻塞(等待)
 	 * 申请完空间之后，必须使用 {@link #publish(long, long)} 发布，否则会导致整个数据结构不可用
-	 *
+     * 警告：一旦进入该方法，除非有空间，否则无法退出，连中断都没有检查 -> 即使消费者已经停止运行了，生产者也无法退出，可能导致死锁。
+     *
      * Claim the next n events in sequence for publishing.  This is for batch event producing.  Using batch producing
      * requires a little care and some math.
      * <pre>
@@ -67,7 +71,9 @@ public interface Sequenced
 
     /**
 	 * 尝试获取下一个数据的索引位置。空间不足时抛出异常。
-	 * 申请完空间之后,必须使用 {@link #publish(long)} 发布，否则会导致整个数据结构不可用
+	 * 申请完空间之后,必须使用 {@link #publish(long)} 发布，否则会导致整个数据结构不可用。
+     * <b>使用该方法可以避免死锁</b>
+     *
      * Attempt to claim the next event in sequence for publishing.  Will return the
      * number of the slot if there is at least <code>requiredCapacity</code> slots
      * available.
@@ -80,7 +86,8 @@ public interface Sequenced
     /**
 	 * 尝试获取接下来n个数据的最后一个数据索引位置。不会阻塞,空间不足时抛出异常。
 	 * 申请完空间之后，必须使用 {@link #publish(long, long)} 发布，否则会导致整个数据结构不可用
-	 *
+	 * <b>使用该方法可以避免死锁</b>
+     *
      * Attempt to claim the next n events in sequence for publishing.  Will return the
      * highest numbered slot if there is at least <code>requiredCapacity</code> slots
      * available.  Have a look at {@link Sequencer#next()} for a description on how to

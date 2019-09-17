@@ -319,6 +319,7 @@ public class Disruptor<T>
     public void setDefaultExceptionHandler(final ExceptionHandler<? super T> exceptionHandler)
     {
         checkNotStarted();
+        // 如果已修改过异常处理器，不允许在修改
         if (!(this.exceptionHandler instanceof ExceptionHandlerWrapper))
         {
             throw new IllegalStateException("setDefaultExceptionHandler can not be used after handleExceptionsWith");

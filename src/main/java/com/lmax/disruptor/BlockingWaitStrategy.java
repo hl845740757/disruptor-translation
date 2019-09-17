@@ -18,9 +18,9 @@ package com.lmax.disruptor;
 import com.lmax.disruptor.util.ThreadHints;
 
 /**
- * 阻塞的等待策略。
- *
- * 当生产者的生产速度较慢时，阻塞事件处理器
+ * 阻塞的等待策略。当生产者的生产速度较慢时，阻塞事件处理器。
+ * <p>
+ * 特征：延迟较高、吞吐量也较低，但是CPU使用率极低，适合那些延迟和吞吐量并不太重要的场景，或CPU资源紧缺的场景。
  *
  * Blocking strategy that uses a lock and condition variable for {@link EventProcessor}s waiting on a barrier.
  * <p>

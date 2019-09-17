@@ -150,7 +150,7 @@ public final class WorkProcessor<T> implements EventProcessor {
 
         // 是否处理了一个事件。在处理完一个事件之后会再次竞争序号进行消费
         boolean processedSequence = true;
-        // 看见的已发布序号的缓存，注意！这里是局部变量，在该变量上无竞争
+        // 看见的已发布序号的缓存，这里是局部变量，在该变量上无竞争
         long cachedAvailableSequence = Long.MIN_VALUE;
         // 下一个要消费的序号(要消费的事件编号)，注意起始为-1 ，注意与BatchEventProcessor的区别
 		// BatchEventProcessor初始值为 sequence.get()+1
@@ -183,8 +183,7 @@ public final class WorkProcessor<T> implements EventProcessor {
                     while (!workSequence.compareAndSet(nextSequence - 1L, nextSequence));
                     // CAS更新workSequence的序号(预分配序号)，为什么这样是安全的呢？
 					// 由于消费者的进度由最小的Sequence决定，当它CAS更新workSequence之后，它代替了workSequence处在旧的进度上。
-					// 就算多个workProcessor竞争，总有一个是处在正确的进度上的。
-					// 由于消费者的进度由最小的Sequence决定，因此 workSequence 的更新并不会影响WorkerPool代表的消费者的消费进度。
+					// 就算多个workProcessor竞争，总有一个是处在正确的进度上的。因此 workSequence 的更新并不会影响WorkerPool代表的消费者的消费进度。
                 }
 
 				// 它只能保证竞争到的序号是可用的，因此只能只消费一个。
@@ -197,6 +196,9 @@ public final class WorkProcessor<T> implements EventProcessor {
                 }
                 else
                 {
+                    // 等待生产者进行生产，这里和BatchEventProcessor不同，
+                    // 如果waitFor抛出TimeoutException、Throwable以外的异常，那么cachedAvailableSequence不会被更新，
+                    // 也就不会导致nextSequence被标记为已消费！
                     cachedAvailableSequence = sequenceBarrier.waitFor(nextSequence);
                 }
             }
@@ -217,7 +219,8 @@ public final class WorkProcessor<T> implements EventProcessor {
 				// 而系统默认的异常处理会将其包装为RuntimeException！！！
 				// handle, mark as processed, unless the exception handler threw an exception
                 exceptionHandler.handleEventException(ex, nextSequence, event);
-                // 成功处理异常后标记当前事件已被处理
+
+                // 成功处理异常后标记当前事件已被消费
                 processedSequence = true;
             }
         }

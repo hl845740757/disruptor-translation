@@ -55,7 +55,6 @@ public interface EventProcessor extends Runnable
 
 	/**
 	 * 查询事件处理器是否运行中
-	 * @return
 	 */
     boolean isRunning();
 }

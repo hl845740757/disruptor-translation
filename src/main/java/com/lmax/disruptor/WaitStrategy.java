@@ -35,6 +35,8 @@ public interface WaitStrategy
 	 * 这种情况的常见用途是发出超时信号，任何使用等待策略获取超时信号的事件处理器都应该显示的处理这种情况。
 	 * eg:批量事件处理器显式的处理了这种情况，进行了超时通知 {@link BatchEventProcessor#notifyTimeout(long)}。
 	 *
+	 * 警告:如果你实现自己的等待策略，那么一定不能抛出任何声明之外的异常！ 否则可能导致严重错误，它可能导致数据/信号丢失！
+	 *
      * Wait for the given sequence to be available.  It is possible for this method to return a value
      * less than the sequence number supplied depending on the implementation of the WaitStrategy.  A common
      * use for this is to signal a timeout.  Any EventProcessor that is using a WaitStrategy to get notifications

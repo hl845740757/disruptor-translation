@@ -57,6 +57,7 @@ public final class MultiProducerSequencer extends AbstractSequencer
     private final Sequence gatingSequenceCache = new Sequence(Sequencer.INITIAL_CURSOR_VALUE);
 
     // 多生产者模式下，标记哪些序号是真正被填充了数据的。 (用于获取连续的可用空间)
+    // 其实就是表明数据是属于第几环
     // availableBuffer tracks the state of each ringbuffer slot
     // see below for more details on the approach
     private final int[] availableBuffer;
@@ -118,14 +119,14 @@ public final class MultiProducerSequencer extends AbstractSequencer
         long cachedGatingSequence = gatingSequenceCache.get();
 
 		// 1.wrapPoint > cachedGatingSequence 表示生产者追上消费者产生环路，上次看见的序号缓存无效，还需要更多的空间
-		// 2.cachedGatingSequence > nextValue 表示消费者的进度大于当前生产者进度，current无效，
+		// 2.cachedGatingSequence > nextValue 表示消费者的进度大于当前生产者进度，current无效，- 竞态更新gatingSequenceCache可能导致该情况
 		// 当其它生产者竞争成功，发布的数据也被消费者消费了时可能产生。(如2生产者1个消费者)
 		// 无锁算法(CAS)都是比较烧脑的算法，尽量不要自己设计，交给大师们设计。
         if (wrapPoint > cachedGatingSequence || cachedGatingSequence > cursorValue)
         {
 			// 缓存无效，尝试更新一下缓存
 			long minSequence = Util.getMinimumSequence(gatingSequences, cursorValue);
-			// 这里存在竞态条件，多线程模式下，可能会被设置为多个线程看见的结果中的任意以一个。
+			// 这里存在竞态条件，多线程模式下，可能会被设置为多个线程看见的结果中的任意一个。
 			// 可能比 cachedGatingSequence更小，可能比cursorValue更大
             gatingSequenceCache.set(minSequence);
 
@@ -214,7 +215,7 @@ public final class MultiProducerSequencer extends AbstractSequencer
 
             // 第一步：空间不足就继续等待。
 			// wrapPoint > cachedGatingSequence 表示生产者追上消费者产生环路，上次看见的序号缓存无效，还需要更多的空间
-			// cachedGatingSequence > nextValue 表示消费者的进度大于当前生产者进度，current无效，
+			// cachedGatingSequence > nextValue 表示消费者的进度大于当前生产者进度，current无效 - 竞态更新gatingSequenceCache可能导致该情况
 			// 当其它生产者竞争成功，发布的数据也被消费者消费了时可能产生。(如2生产者1个消费者)
 			// 无锁算法(CAS)都是比较烧脑的算法，尽量不要自己设计，交给大师们设计。
 			if (wrapPoint > cachedGatingSequence || cachedGatingSequence > current)
@@ -231,7 +232,7 @@ public final class MultiProducerSequencer extends AbstractSequencer
                 }
 
                 // 检测到未构成环路(多线程下这都是假设条件)，更新网关序列，然后进行重试
-                // 这里存在竞态条件，多线程模式下，可能会被设置为一个更小的值，从而小于当前分配的值(current)
+                // 这里存在竞态条件，多线程模式下，可能会被设置为多个线程看见的结果中的任意一个，可能会被设置为一个更小的值，从而小于当前分配的值(current)
                 gatingSequenceCache.set(gatingSequence);
 
                 // 这里看见有足够空间，这里如果尝试竞争空间会产生重复的代码，其实就是外层的代码，因此直接等待下一个循环
@@ -379,7 +380,7 @@ public final class MultiProducerSequencer extends AbstractSequencer
     }
 
     /**
-	 * 当指定插槽上的标记和sequence算出的标记一致时，表示可用(已发布)
+	 * 当指定插槽上的标记和sequence算出的标记一致时，表示可用(已发布) - 标记其实就是第几环
      * @see Sequencer#isAvailable(long)
      */
     @Override

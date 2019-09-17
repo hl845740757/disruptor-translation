@@ -20,8 +20,9 @@ import com.lmax.disruptor.util.ThreadHints;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 更轻量级的阻塞等待策略
- * 注释参考{@link BlockingWaitStrategy}
+ * 更轻量级的阻塞等待策略，注释参考{@link BlockingWaitStrategy}。
+ * <p>
+ * 特征：延迟较高、吞吐量也较低，但是CPU使用率极低，适合那些延迟和吞吐量并不太重要的场景，或CPU资源紧缺的场景。
  *
  * Variation of the {@link BlockingWaitStrategy} that attempts to elide conditional wake-ups when
  * the lock is uncontended.  Shows performance improvements on microbenchmarks.  However this
@@ -39,6 +40,7 @@ public final class LiteBlockingWaitStrategy implements WaitStrategy
         throws AlertException, InterruptedException
     {
         long availableSequence;
+        // 确保生产者生产了对应的数据
         if (cursorSequence.get() < sequence)
         {
             synchronized (mutex)
@@ -75,6 +77,7 @@ public final class LiteBlockingWaitStrategy implements WaitStrategy
     {
         if (signalNeeded.getAndSet(false))
         {
+            // 走到这里表示需要进行通知
             synchronized (mutex)
             {
                 mutex.notifyAll();

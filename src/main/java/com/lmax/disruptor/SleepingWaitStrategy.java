@@ -18,7 +18,13 @@ package com.lmax.disruptor;
 import java.util.concurrent.locks.LockSupport;
 
 /**
- * 睡眠等待策略
+ * 睡眠等待策略。
+ * <p>
+ * 等待方式：自旋 + yield + sleep
+ * <p>
+ * 表现：延迟不均匀，吞吐量较低，但是cpu占有率也较低。
+ * 算是CPU与性能之间的一个折中，当CPU资源紧张时可以考虑使用该策略。
+ *
  *
  * Sleeping strategy that initially spins, then uses a Thread.yield(), and
  * eventually sleep (<code>LockSupport.parkNanos(n)</code>) for the minimum
