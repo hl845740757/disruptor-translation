@@ -7,6 +7,10 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
+ * 轻量级的带超时的阻塞等待策略。
+ * 如果生产者生产速率不够，则阻塞式等待生产者一段时间。
+ * 如果是等待依赖的其它消费者，则轮询式等待。
+ *
  * Variation of the {@link TimeoutBlockingWaitStrategy} that attempts to elide conditional wake-ups
  * when the lock is uncontended.
  */
@@ -14,6 +18,9 @@ public class LiteTimeoutBlockingWaitStrategy implements WaitStrategy
 {
     private final Lock lock = new ReentrantLock();
     private final Condition processorNotifyCondition = lock.newCondition();
+    /**
+     * 减少不必要的锁申请
+     */
     private final AtomicBoolean signalNeeded = new AtomicBoolean(false);
     private final long timeoutInNanos;
 
@@ -40,6 +47,8 @@ public class LiteTimeoutBlockingWaitStrategy implements WaitStrategy
             {
                 while (cursorSequence.get() < sequence)
                 {
+                    // 如果生产者生成速率不足，则准备等待
+                    // 在等待前标记为需要被通知 - 该代码其实可以下挪一行
                     signalNeeded.getAndSet(true);
 
                     barrier.checkAlert();

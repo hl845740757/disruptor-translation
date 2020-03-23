@@ -16,6 +16,10 @@
 package com.lmax.disruptor;
 
 /**
+ * 事件处理器生命周期通知
+ *
+ * 如果你的EventHandler实现了该接口，则事件处理器在启动和停止的时候都会收到通知.(可能多次启动-停止)
+ *
  * Implement this interface in your {@link EventHandler} to be notified when a thread for the
  * {@link BatchEventProcessor} starts and shuts down.
  */

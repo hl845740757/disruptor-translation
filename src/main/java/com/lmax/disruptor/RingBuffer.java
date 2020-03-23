@@ -28,11 +28,17 @@ abstract class RingBufferPad
 
 abstract class RingBufferFields<E> extends RingBufferPad
 {
+	// 数组填充大小，避免数组的有效元素出现伪共享
+	// 数组的前X个元素会出现伪共享和后X个元素可能会出现伪共享,可能和无关数据加载到同一个缓存行。
+	// （更多伪共享信息请查阅资料）
     private static final int BUFFER_PAD;
+    // 引用对象数组有效首元素地址偏移量(这里因为进行了填充，所以不是真正的首元素的地址偏移量)
     private static final long REF_ARRAY_BASE;
+    // 引用对象数组的单个元素的地址移位量(用移位运算代替乘法)
     private static final int REF_ELEMENT_SHIFT;
     private static final Unsafe UNSAFE = Util.getUnsafe();
 
+    // 这块代码没有看的太明白，大致意思是计算被缓存行填充后的数据起始偏移量
     static
     {
         final int scale = UNSAFE.arrayIndexScale(Object[].class);
@@ -53,9 +59,21 @@ abstract class RingBufferFields<E> extends RingBufferPad
         REF_ARRAY_BASE = UNSAFE.arrayBaseOffset(Object[].class) + (BUFFER_PAD << REF_ELEMENT_SHIFT);
     }
 
+    /**
+     * 索引掩码，表示后X位是有效数字(截断)。位运算代替取余快速计算插槽索引
+     */
     private final long indexMask;
+    /**
+     * 事件对象数组，大于真正需要的容量，采用了缓存行填充减少伪共享。
+     */
     private final Object[] entries;
+    /**
+	 * 缓存有效空间大小(必须是2的整次幂，-1就是掩码)
+	 */
     protected final int bufferSize;
+    /**
+     * 序号生成器
+     */
     protected final Sequencer sequencer;
 
     RingBufferFields(
@@ -74,11 +92,16 @@ abstract class RingBufferFields<E> extends RingBufferPad
             throw new IllegalArgumentException("bufferSize must be a power of 2");
         }
 
+        // 掩码
         this.indexMask = bufferSize - 1;
+        // 额外创建 2个填充空间的大小，首尾填充，比较数组和其他对象加载到同一个缓存行。
         this.entries = new Object[sequencer.getBufferSize() + 2 * BUFFER_PAD];
         fill(eventFactory);
     }
 
+    /**
+     * 数组元素的预填充
+     */
     private void fill(EventFactory<E> eventFactory)
     {
         for (int i = 0; i < bufferSize; i++)
@@ -90,6 +113,9 @@ abstract class RingBufferFields<E> extends RingBufferPad
     @SuppressWarnings("unchecked")
     protected final E elementAt(long sequence)
     {
+        // elementIndex = sequence & indexMask (后多少位是有效数字，前面的是倍数不需要被关心)
+        // addressElementOffset = elementIndex << REF_ELEMENT_SHIFT (这里使用了移位运算代替乘法)
+        // addressElementOffset = elementIndex * perElementOffset
         return (E) UNSAFE.getObject(entries, REF_ARRAY_BASE + ((sequence & indexMask) << REF_ELEMENT_SHIFT));
     }
 }
@@ -220,6 +246,16 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+     * 获取指定sequence对应的数据。
+     * 该方法由两个用途：
+     * <p>
+     *     1. 用于生产者发布数据。生产者在调用{@link #next()}{@link #tryNext()}之后，
+     *     获取事件对象，然后调用{@link #publish(long)}发布数据。
+     * <p>
+     *     2. 用于消费者消费数据，当生产者调用{@link SequenceBarrier#waitFor(long)}之后，
+     *     如果返回的sequence大于等于生产者期望的sequence，那么表示消费者可以消费这些sequence对应的数据。
+     *
+     *
      * <p>Get the event for a given sequence in the RingBuffer.</p>
      *
      * <p>This call has 2 uses.  Firstly use this call when publishing to a ring buffer.
@@ -241,6 +277,11 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+     * 获取下一个数据的索引，空间不足是会阻塞(等待)
+     * 申请完空间之后,必须使用 {@link #publish(long)} 发布，否则会导致整个数据结构不可用
+     * <p>
+     * 警告：一旦进入该方法，除非有空间，否则无法退出，连中断都没有检查 -> 即使消费者已经停止运行了，生产者也无法退出，可能导致死锁。
+     *
      * Increment and return the next sequence for the ring buffer.  Calls of this
      * method should ensure that they always publish the sequence afterward.  E.g.
      * <pre>
@@ -264,6 +305,8 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+     * 警告：一旦进入该方法，除非有空间，否则无法退出，连中断都没有检查 -> 即使消费者已经停止运行了，生产者也无法退出，可能导致死锁。
+     *
      * The same functionality as {@link RingBuffer#next()}, but allows the caller to claim
      * the next n sequences.
      *
@@ -278,6 +321,10 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 尝试申请一个缓存空间(请求分配一个序号)。
+	 * 使用该方法必须保证使用对应的publish()方法发布（try-finally代码块）。示例代码段见源注释。
+     * <b>使用该方法可以避免死锁</b>
+	 *
      * <p>Increment and return the next sequence for the ring buffer.  Calls of this
      * method should ensure that they always publish the sequence afterward.  E.g.</p>
      * <pre>
@@ -304,6 +351,10 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 *
+	 * 注释参考{@link #tryNext()}，只不过是变成了申请多个空间，批量申请空间。
+     * <b>使用该方法可以避免死锁</b>
+     *
      * The same functionality as {@link RingBuffer#tryNext()}, but allows the caller to attempt
      * to claim the next n sequences.
      *
@@ -318,6 +369,10 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 将生产者的光标移动到指定位置(生产者已生产到指定序号)
+	 * 注意：存在数据竞争(安全隐患)。仅可以在受控的情况下使用，如：初始化的时候
+	 * 不建议使用，正常情况也不需要使用它
+	 *
      * Resets the cursor to a specific value.  This can be applied at any time, but it is worth noting
      * that it can cause a data race and should only be used in controlled circumstances.  E.g. during
      * initialisation.
@@ -333,6 +388,10 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 将生产者的光标移动到指定位置，并返回指定位置的值
+	 * 注意：存在数据竞争(安全隐患)，仅可以在受控的情况下使用，如：初始化的时候。
+	 * 不建议使用，正常情况也不会需要它。
+	 *
      * Sets the cursor to a specific sequence and returns the preallocated entry that is stored there.  This
      * can cause a data race and should only be done in controlled circumstances, e.g. during initialisation.
      *
@@ -346,6 +405,16 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 确定指定序号的数据是否可用(由于存在数据竞争问题，返回值只是一个参考值，并非准确值(旧值))。
+	 * 注意：如果上下文中没有维持一个序列屏障(保证原子性)，基于该方法返回结果去读取数据将产生竞态条件，可能破坏一致性约束，而导致错误。
+	 *
+	 * 竞态条件之先检查后执行 ------ 如果两步操作不是原子的，检查结果总是一个旧值，而期望使用旧值做事情是错误的。
+	 * eg:
+	 *  if(isAvailable(x)){
+	 *      T event=ringBuffer.get(x);
+	 *      // 这里将由于消费者之间的竞态条件而产生错误
+	 *  }
+	 *
      * Determines if a particular entry is available.  Note that using this when not within a context that is
      * maintaining a sequence barrier, it is likely that using this to determine if you can read a value is likely
      * to result in a race condition and broken code.
@@ -362,6 +431,8 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 添加追踪的序列(消费链末端的消费者的序列)
+	 *
      * Add the specified gating sequences to this instance of the Disruptor.  They will
      * safely and atomically added to the list of gating sequences.
      *
@@ -373,6 +444,9 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 获取最小网关序列，当没有网关时，生产者的序列就是网关
+	 * @see Sequencer#getMinimumSequence()
+	 *
      * Get the minimum sequence value from all of the gating sequences
      * added to this ringBuffer.
      *
@@ -385,6 +459,8 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 删除网关序列(该序列代表的消费者不再是消费链末端的消费者了)
+	 *
      * Remove the specified sequence from this ringBuffer.
      *
      * @param sequence to be removed.
@@ -396,6 +472,8 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 注释见@see Sequencer#newBarrier(Sequence...)
+	 *
      * Create a new SequenceBarrier to be used by an EventProcessor to track which messages
      * are available to be read from the ring buffer given a list of sequences to track.
      *
@@ -409,6 +487,7 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 创建一个依赖指定Sequence的事件轮询器
      * Creates an event poller for this ring buffer gated on the supplied sequences.
      *
      * @param gatingSequences to be gated on.
@@ -420,6 +499,8 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 获取ring的游标(生产者的最大序号)，它真正的值依赖于它使用的Sequencer。
+	 *
      * Get the current cursor value for the ring buffer.  The actual value received
      * will depend on the type of {@link Sequencer} that is being used.
      *
@@ -441,8 +522,22 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
-     * Given specified <tt>requiredCapacity</tt> determines if that amount of space
-     * is available.  Note, you can not assume that if this method returns <tt>true</tt>
+	 * 是否有足够的空间。
+	 * @see #isPublished(long) 注释参考
+	 *
+	 * 注意:存在数据竞争问题，返回值只是一个参考值，并非准确值(旧值)。
+	 * 如果是多生产模型，即使方法返回true，{@link RingBuffer#next()}也可能会阻塞！
+     * 只有是单生产模型的时候，方法返回true时一定不会阻塞。
+     * <p>
+     * 该方法在多生产者下，检查后发布，是一个先检查后执行操作，是极度不安全的，应当使用{@link #tryNext(int)}!
+     * <p>
+	 * eg:
+	 * if(hasAvailableCapacity(x)){
+	 *     long sequence=next();// 这里还是可能阻塞，在生产者模型下，总是存在竞争问题
+	 *     long sequence=tryNext();// 这里可能抛出空间不足异常，不一定能申请到空间
+	 * }
+     * Given specified <code>requiredCapacity</code> determines if that amount of space
+     * is available.  Note, you can not assume that if this method returns <code>true</code>
      * that a call to {@link RingBuffer#next()} will not block.  Especially true if this
      * ring buffer is set up to handle multiple producers.
      *
@@ -455,6 +550,8 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
         return sequencer.hasAvailableCapacity(requiredCapacity);
     }
 
+	// ---------------------------后面的所有的publishEvent都是表示基于数据传输对象(TO)发布数据，不详细解释了---------------
+	// 真的佩服。。。写这么多发布事件方法
 
     /**
      * @see com.lmax.disruptor.EventSink#publishEvent(com.lmax.disruptor.EventTranslator)
@@ -863,6 +960,8 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 在申请某个空间之后，发布该空间数据，消费者们能感知到指定序号的数据发布了(可读了)。
+	 * 在申请空间之后必须使用该方法进行发布，否则会造成阻塞，最终死锁。
      * Publish the specified sequence.  This action marks this particular
      * message as being available to be read.
      *
@@ -875,6 +974,8 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 申请某段空间之后，发布该段空间的数据，消费者们能感知到该段数据发布了(可读了)。
+	 * 在申请空间之后必须使用该方法进行发布，否则会造成阻塞，最终死锁。
      * Publish the specified sequences.  This action marks these particular
      * messages as being available to be read.
      *
@@ -889,6 +990,9 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     }
 
     /**
+	 * 获取RingBuffer剩余空间
+	 * @see #hasAvailableCapacity(int) 注意同样的数据竞争问题，返回值只是一个参考值，并非准确值(旧值)！
+	 *
      * Get the remaining capacity for this ringBuffer.
      *
      * @return The number of slots remaining.

@@ -1,5 +1,11 @@
 package com.lmax.disruptor;
 
+/**
+ * 定义了各种发布事件的方法 (使用事件传输对象发布事件)
+ *
+ * 不知道什么时候加的，感觉像后加的，有点像适配器。
+ * @param <E>
+ */
 public interface EventSink<E>
 {
     /**
