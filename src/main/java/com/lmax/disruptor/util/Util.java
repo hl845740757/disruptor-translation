@@ -15,24 +15,22 @@
  */
 package com.lmax.disruptor.util;
 
-import com.lmax.disruptor.EventProcessor;
-import com.lmax.disruptor.Sequence;
-import sun.misc.Unsafe;
-
 import java.lang.reflect.Field;
 import java.security.AccessController;
 import java.security.PrivilegedExceptionAction;
 
+import com.lmax.disruptor.EventProcessor;
+import com.lmax.disruptor.Sequence;
+
+
+import sun.misc.Unsafe;
+
 /**
- * 工具类，实现一些通用的方法
- *
  * Set of common functions used by the Disruptor
  */
 public final class Util
 {
     /**
-	 * 计算X靠近的下一个2的n次幂
-	 *
      * Calculate the next power of 2, greater than or equal to x.<p>
      * From Hacker's Delight, Chapter 3, Harry S. Warren Jr.
      *
@@ -45,14 +43,10 @@ public final class Util
     }
 
     /**
-	 * 找出Sequence中序号最小的Sequence的序号
-	 *
      * Get the minimum sequence from an array of {@link com.lmax.disruptor.Sequence}s.
      *
      * @param sequences to compare.
      * @return the minimum sequence found or Long.MAX_VALUE if the array is empty.
-	 * 			如果数组为空，则返回Long.MAX_VALUE。
-	 * 			为何不返回{@link com.lmax.disruptor.Sequencer#INITIAL_CURSOR_VALUE}
      */
     public static long getMinimumSequence(final Sequence[] sequences)
     {
@@ -60,7 +54,6 @@ public final class Util
     }
 
     /**
-	 * 找出Sequence中序号最小的Sequence的序号。
      * Get the minimum sequence from an array of {@link com.lmax.disruptor.Sequence}s.
      *
      * @param sequences to compare.
@@ -81,7 +74,6 @@ public final class Util
     }
 
     /**
-	 * 获取给定的EventProcessor的序列数组。
      * Get an array of {@link Sequence}s for the passed {@link EventProcessor}s
      *
      * @param processors for which to get the sequences
@@ -134,7 +126,6 @@ public final class Util
     }
 
     /**
-	 * 计算以2为底，i的对数
      * Calculate the log base 2 of the supplied integer, essentially reports the location
      * of the highest bit.
      *
@@ -149,25 +140,5 @@ public final class Util
             ++r;
         }
         return r;
-    }
-
-	/**
-	 * 在指定对象上等待指定时间
-	 * @param mutex 锁对象
-	 * @param timeoutNanos 等待时间
-	 * @return 返回剩余等待时间
-	 * @throws InterruptedException 等待过程中被中断则会抛出中断异常
-	 */
-    public static long awaitNanos(Object mutex, long timeoutNanos) throws InterruptedException
-    {
-        long millis = timeoutNanos / 1_000_000;
-        long nanos = timeoutNanos % 1_000_000;
-
-        long t0 = System.nanoTime();
-        mutex.wait(millis, (int) nanos);
-        long t1 = System.nanoTime();
-
-        // 剩余等待时间
-        return timeoutNanos - (t1 - t0);
     }
 }

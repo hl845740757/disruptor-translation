@@ -20,7 +20,11 @@ import static com.lmax.disruptor.support.PerfTestUtil.failIfNot;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import com.lmax.disruptor.*;
+import com.lmax.disruptor.AbstractPerfTestDisruptor;
+import com.lmax.disruptor.FatalExceptionHandler;
+import com.lmax.disruptor.RingBuffer;
+import com.lmax.disruptor.WorkerPool;
+import com.lmax.disruptor.YieldingWaitStrategy;
 import com.lmax.disruptor.support.EventCountingAndReleasingWorkHandler;
 import com.lmax.disruptor.support.ValueEvent;
 import com.lmax.disruptor.util.DaemonThreadFactory;
@@ -81,9 +85,8 @@ public final class OneToThreeReleasingWorkerPoolThroughputTest
     }
 
     @Override
-    protected PerfTestContext runDisruptorPass() throws InterruptedException
+    protected long runDisruptorPass() throws InterruptedException
     {
-        PerfTestContext perfTestContext = new PerfTestContext();
 
         resetCounters();
         RingBuffer<ValueEvent> ringBuffer = workerPool.start(executor);
@@ -101,11 +104,11 @@ public final class OneToThreeReleasingWorkerPoolThroughputTest
         // Workaround to ensure that the last worker(s) have completed after releasing their events
         Thread.sleep(1L);
 
-        perfTestContext.setDisruptorOps((ITERATIONS * 1000L) / (System.currentTimeMillis() - start));
+        long opsPerSecond = (ITERATIONS * 1000L) / (System.currentTimeMillis() - start);
 
         failIfNot(ITERATIONS, sumCounters());
 
-        return perfTestContext;
+        return opsPerSecond;
     }
 
     private void resetCounters()

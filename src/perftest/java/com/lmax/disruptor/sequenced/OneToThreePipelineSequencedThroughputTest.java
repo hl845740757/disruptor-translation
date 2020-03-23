@@ -22,7 +22,11 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import com.lmax.disruptor.*;
+import com.lmax.disruptor.AbstractPerfTestDisruptor;
+import com.lmax.disruptor.BatchEventProcessor;
+import com.lmax.disruptor.RingBuffer;
+import com.lmax.disruptor.SequenceBarrier;
+import com.lmax.disruptor.YieldingWaitStrategy;
 import com.lmax.disruptor.support.FunctionEvent;
 import com.lmax.disruptor.support.FunctionEventHandler;
 import com.lmax.disruptor.support.FunctionStep;
@@ -125,10 +129,8 @@ public final class OneToThreePipelineSequencedThroughputTest extends AbstractPer
     }
 
     @Override
-    protected PerfTestContext runDisruptorPass() throws InterruptedException
+    protected long runDisruptorPass() throws InterruptedException
     {
-        PerfTestContext perfTestContext = new PerfTestContext();
-
         CountDownLatch latch = new CountDownLatch(1);
         stepThreeFunctionHandler.reset(latch, stepThreeBatchProcessor.getSequence().get() + ITERATIONS);
 
@@ -149,7 +151,7 @@ public final class OneToThreePipelineSequencedThroughputTest extends AbstractPer
         }
 
         latch.await();
-        perfTestContext.setDisruptorOps((ITERATIONS * 1000L) / (System.currentTimeMillis() - start));
+        long opsPerSecond = (ITERATIONS * 1000L) / (System.currentTimeMillis() - start);
 
         stepOneBatchProcessor.halt();
         stepTwoBatchProcessor.halt();
@@ -157,7 +159,7 @@ public final class OneToThreePipelineSequencedThroughputTest extends AbstractPer
 
         failIfNot(expectedResult, stepThreeFunctionHandler.getStepThreeCounter());
 
-        return perfTestContext;
+        return opsPerSecond;
     }
 
     public static void main(String[] args) throws Exception

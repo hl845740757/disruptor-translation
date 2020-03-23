@@ -16,13 +16,6 @@
 package com.lmax.disruptor;
 
 /**
- * Sequence提交，用于获取BatchEventProcessor绑定的Sequence？现在还没有对应的代码推断到底干嘛的(可能还在开发)。
- * 用于BatchEventProcessor设置一个回调，允许EventHandler在完成事件消费之后进行通知。
- *
- *
- * 通常，这将在handler执行某些批处理操作（例如写入IO设备）时使用;
- * 在操作完成后，接口的实现者应该调用{@link Sequence＃set}来更新序列，并允许依赖于此处理程序的其他进程进行。
- *
  * Used by the {@link BatchEventProcessor} to set a callback allowing the {@link EventHandler} to notify
  * when it has finished consuming an event if this happens after the {@link EventHandler#onEvent(Object, long, boolean)} call.
  * <p>
@@ -36,7 +29,6 @@ public interface SequenceReportingEventHandler<T>
     extends EventHandler<T>
 {
     /**
-	 * 用于BatchEventProcessor建立回调机制。
      * Call by the {@link BatchEventProcessor} to setup the callback.
      *
      * @param sequenceCallback callback on which to notify the {@link BatchEventProcessor} that the sequence has progressed.

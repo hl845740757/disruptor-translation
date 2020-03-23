@@ -15,9 +15,6 @@
  */
 package com.lmax.disruptor;
 
-/**
- * 事件释放通知
- */
 public interface EventReleaseAware
 {
     void setEventReleaser(EventReleaser eventReleaser);

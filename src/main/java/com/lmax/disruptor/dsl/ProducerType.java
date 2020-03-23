@@ -27,7 +27,6 @@ public enum ProducerType
 
     /**
      * Create a RingBuffer supporting multiple event publishers to the one RingBuffer
-	 * 单生产者和多生产的主要差别在空间分配上(序号分配上)。
      */
     MULTI
 }

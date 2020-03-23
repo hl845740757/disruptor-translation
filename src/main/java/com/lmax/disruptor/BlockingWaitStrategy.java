@@ -15,46 +15,46 @@
  */
 package com.lmax.disruptor;
 
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
 import com.lmax.disruptor.util.ThreadHints;
 
 /**
- * 阻塞的等待策略。当生产者的生产速度较慢时，阻塞事件处理器。
- * <p>
- * 特征：延迟较高、吞吐量也较低，但是CPU使用率极低，适合那些延迟和吞吐量并不太重要的场景，或CPU资源紧缺的场景。
- *
  * Blocking strategy that uses a lock and condition variable for {@link EventProcessor}s waiting on a barrier.
  * <p>
  * This strategy can be used when throughput and low-latency are not as important as CPU resource.
  */
 public final class BlockingWaitStrategy implements WaitStrategy
 {
-    private final Object mutex = new Object();
+    private final Lock lock = new ReentrantLock();
+    private final Condition processorNotifyCondition = lock.newCondition();
 
     @Override
     public long waitFor(long sequence, Sequence cursorSequence, Sequence dependentSequence, SequenceBarrier barrier)
         throws AlertException, InterruptedException
     {
         long availableSequence;
-
-        // 步骤1.确保等待的序号的数据已经发布(协调与生产者之间的关系)
-        // 双重校验锁，能不锁就不锁
         if (cursorSequence.get() < sequence)
         {
-            synchronized (mutex)
+            lock.lock();
+            try
             {
-            	// 循环中检测，避免被错误的唤醒
                 while (cursorSequence.get() < sequence)
                 {
                     barrier.checkAlert();
-                    mutex.wait();
+                    processorNotifyCondition.await();
                 }
+            }
+            finally
+            {
+                lock.unlock();
             }
         }
 
-        // 步骤2.确保该序号已经被我前面的消费者消费(协调与其他消费者的关系)
         while ((availableSequence = dependentSequence.get()) < sequence)
         {
-        	// 可理解为返回之前检查中断
             barrier.checkAlert();
             ThreadHints.onSpinWait();
         }
@@ -65,10 +65,14 @@ public final class BlockingWaitStrategy implements WaitStrategy
     @Override
     public void signalAllWhenBlocking()
     {
-        synchronized (mutex)
+        lock.lock();
+        try
         {
-        	// 唤醒屏障上所有等待的线程，这里不满足单进单出条件
-            mutex.notifyAll();
+            processorNotifyCondition.signalAll();
+        }
+        finally
+        {
+            lock.unlock();
         }
     }
 
@@ -76,7 +80,7 @@ public final class BlockingWaitStrategy implements WaitStrategy
     public String toString()
     {
         return "BlockingWaitStrategy{" +
-            "mutex=" + mutex +
+            "processorNotifyCondition=" + processorNotifyCondition +
             '}';
     }
 }

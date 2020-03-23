@@ -22,7 +22,11 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import com.lmax.disruptor.*;
+import com.lmax.disruptor.AbstractPerfTestDisruptor;
+import com.lmax.disruptor.BatchEventProcessor;
+import com.lmax.disruptor.RingBuffer;
+import com.lmax.disruptor.SequenceBarrier;
+import com.lmax.disruptor.YieldingWaitStrategy;
 import com.lmax.disruptor.support.FizzBuzzEvent;
 import com.lmax.disruptor.support.FizzBuzzEventHandler;
 import com.lmax.disruptor.support.FizzBuzzStep;
@@ -134,9 +138,8 @@ public final class OneToThreeDiamondSequencedThroughputTest extends AbstractPerf
     }
 
     @Override
-    protected PerfTestContext runDisruptorPass() throws Exception
+    protected long runDisruptorPass() throws Exception
     {
-        PerfTestContext perfTestContext = new PerfTestContext();
         CountDownLatch latch = new CountDownLatch(1);
         fizzBuzzHandler.reset(latch, batchProcessorFizzBuzz.getSequence().get() + ITERATIONS);
 
@@ -154,7 +157,7 @@ public final class OneToThreeDiamondSequencedThroughputTest extends AbstractPerf
         }
 
         latch.await();
-        perfTestContext.setDisruptorOps((ITERATIONS * 1000L) / (System.currentTimeMillis() - start));
+        long opsPerSecond = (ITERATIONS * 1000L) / (System.currentTimeMillis() - start);
 
         batchProcessorFizz.halt();
         batchProcessorBuzz.halt();
@@ -162,7 +165,7 @@ public final class OneToThreeDiamondSequencedThroughputTest extends AbstractPerf
 
         failIfNot(expectedResult, fizzBuzzHandler.getFizzBuzzCounter());
 
-        return perfTestContext;
+        return opsPerSecond;
     }
 
     public static void main(String[] args) throws Exception

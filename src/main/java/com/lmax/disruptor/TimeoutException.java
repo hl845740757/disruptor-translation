@@ -11,7 +11,7 @@ public final class TimeoutException extends Exception
     }
 
     @Override
-    public Throwable fillInStackTrace()
+    public synchronized Throwable fillInStackTrace()
     {
         return this;
     }

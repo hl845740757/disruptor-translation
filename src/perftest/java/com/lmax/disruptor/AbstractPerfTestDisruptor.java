@@ -30,32 +30,27 @@ public abstract class AbstractPerfTestDisruptor
             System.out.println("Processors required = " + getRequiredProcessorCount() + " available = " + availableProcessors);
         }
 
-        PerfTestContext[] contexts = new PerfTestContext[RUNS];
+        long[] disruptorOps = new long[RUNS];
 
         System.out.println("Starting Disruptor tests");
         for (int i = 0; i < RUNS; i++)
         {
             System.gc();
-            PerfTestContext context = runDisruptorPass();
-            contexts[i] = context;
-            System.out.format("Run %d, Disruptor=%,d ops/sec BatchPercent=%.2f%% AverageBatchSize=%,d\n",
-                    i, context.getDisruptorOps(), context.getBatchPercent() * 100, (long)context.getAverageBatchSize());
+            disruptorOps[i] = runDisruptorPass();
+            System.out.format("Run %d, Disruptor=%,d ops/sec%n", i, Long.valueOf(disruptorOps[i]));
         }
     }
 
-    public static void printResults(final String className, final PerfTestContext[] contexts, final long[] queueOps)
+    public static void printResults(final String className, final long[] disruptorOps, final long[] queueOps)
     {
         for (int i = 0; i < RUNS; i++)
         {
-            PerfTestContext context = contexts[i];
-            System.out.format("%s run %d: BlockingQueue=%,d Disruptor=%,d ops/sec BatchPercent=%,d AverageBatchSize=%,d\n",
-                              className, Integer.valueOf(i), Long.valueOf(queueOps[i]), Long.valueOf(context.getDisruptorOps()),
-                              Double.valueOf(context.getBatchPercent()), Double.valueOf(context.getAverageBatchSize()));
+            System.out.format("%s run %d: BlockingQueue=%,d Disruptor=%,d ops/sec\n",
+                              className, Integer.valueOf(i), Long.valueOf(queueOps[i]), Long.valueOf(disruptorOps[i]));
         }
     }
 
     protected abstract int getRequiredProcessorCount();
 
-    protected abstract PerfTestContext runDisruptorPass() throws Exception;
+    protected abstract long runDisruptorPass() throws Exception;
 }
-

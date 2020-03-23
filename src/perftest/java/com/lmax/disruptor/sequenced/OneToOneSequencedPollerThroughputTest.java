@@ -22,8 +22,11 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import com.lmax.disruptor.*;
+import com.lmax.disruptor.AbstractPerfTestDisruptor;
+import com.lmax.disruptor.EventPoller;
 import com.lmax.disruptor.EventPoller.PollState;
+import com.lmax.disruptor.RingBuffer;
+import com.lmax.disruptor.YieldingWaitStrategy;
 import com.lmax.disruptor.support.PerfTestUtil;
 import com.lmax.disruptor.support.ValueEvent;
 import com.lmax.disruptor.util.DaemonThreadFactory;
@@ -85,12 +88,11 @@ public final class OneToOneSequencedPollerThroughputTest extends AbstractPerfTes
         return 2;
     }
 
-    private static class PollRunnable implements Runnable, EventPoller.Handler<ValueEvent>, BatchStartAware
+    private static class PollRunnable implements Runnable, EventPoller.Handler<ValueEvent>
     {
         private final EventPoller<ValueEvent> poller;
         private volatile boolean running = true;
         private final PaddedLong value = new PaddedLong();
-        private final PaddedLong batchesProcessed = new PaddedLong();
         private CountDownLatch latch;
         private long count;
 
@@ -141,7 +143,6 @@ public final class OneToOneSequencedPollerThroughputTest extends AbstractPerfTes
             value.set(0L);
             this.latch = latch;
             count = expectedCount;
-            batchesProcessed.set(0);
             running = true;
         }
 
@@ -149,23 +150,11 @@ public final class OneToOneSequencedPollerThroughputTest extends AbstractPerfTes
         {
             return value.get();
         }
-
-        public long getBatchesProcessed()
-        {
-            return batchesProcessed.get();
-        }
-
-        @Override
-        public void onBatchStart(long batchSize)
-        {
-            batchesProcessed.increment();
-        }
     }
 
     @Override
-    protected PerfTestContext runDisruptorPass() throws InterruptedException
+    protected long runDisruptorPass() throws InterruptedException
     {
-        PerfTestContext perfTestContext = new PerfTestContext();
         final CountDownLatch latch = new CountDownLatch(1);
         long expectedCount = poller.getSequence().get() + ITERATIONS;
         pollRunnable.reset(latch, expectedCount);
@@ -182,14 +171,13 @@ public final class OneToOneSequencedPollerThroughputTest extends AbstractPerfTes
         }
 
         latch.await();
-        perfTestContext.setDisruptorOps((ITERATIONS * 1000L) / (System.currentTimeMillis() - start));
-        perfTestContext.setBatchData(pollRunnable.getBatchesProcessed(), ITERATIONS);
+        long opsPerSecond = (ITERATIONS * 1000L) / (System.currentTimeMillis() - start);
         waitForEventProcessorSequence(expectedCount);
         pollRunnable.halt();
 
         failIfNot(expectedResult, pollRunnable.getValue());
 
-        return perfTestContext;
+        return opsPerSecond;
     }
 
     private void waitForEventProcessorSequence(long expectedCount) throws InterruptedException

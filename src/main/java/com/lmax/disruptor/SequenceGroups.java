@@ -20,19 +20,10 @@ import static java.util.Arrays.copyOf;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 /**
- * SequenceGroup的工具类
  * Provides static methods for managing a {@link SequenceGroup} object.
  */
 class SequenceGroups
 {
-	/**
-	 * 原子方式添加Sequence,并将要添加的Sequence进度设置为生产者最新的值
-	 * @param holder 域所属的对象
-	 * @param updater 域更新器
-	 * @param cursor 生产者光标(进度)
-	 * @param sequencesToAdd 要添加的Sequences
-	 * @param <T>
-	 */
     static <T> void addSequences(
         final T holder,
         final AtomicReferenceFieldUpdater<T, Sequence[]> updater,
@@ -65,14 +56,6 @@ class SequenceGroups
         }
     }
 
-	/**
-	 * 原子方式移除Sequence
-	 * @param holder 域所属的对象
-	 * @param sequenceUpdater 域更新器
-	 * @param sequence 要移除的Sequence
-	 * @param <T>
-	 * @return
-	 */
     static <T> boolean removeSequence(
         final T holder,
         final AtomicReferenceFieldUpdater<T, Sequence[]> sequenceUpdater,

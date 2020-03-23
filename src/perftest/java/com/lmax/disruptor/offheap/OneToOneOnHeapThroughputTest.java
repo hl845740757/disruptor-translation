@@ -2,7 +2,6 @@ package com.lmax.disruptor.offheap;
 
 import com.lmax.disruptor.*;
 import com.lmax.disruptor.util.DaemonThreadFactory;
-import com.lmax.disruptor.util.PaddedLong;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -48,9 +47,8 @@ public class OneToOneOnHeapThroughputTest extends AbstractPerfTestDisruptor
     }
 
     @Override
-    protected PerfTestContext runDisruptorPass() throws Exception
+    protected long runDisruptorPass() throws Exception
     {
-        PerfTestContext perfTestContext = new PerfTestContext();
         byte[] data = this.data;
 
         final CountDownLatch latch = new CountDownLatch(1);
@@ -72,12 +70,11 @@ public class OneToOneOnHeapThroughputTest extends AbstractPerfTestDisruptor
         }
 
         latch.await();
-        perfTestContext.setDisruptorOps((ITERATIONS * 1000L) / (System.currentTimeMillis() - start));
-        perfTestContext.setBatchData(handler.getBatchesProcessed(), ITERATIONS);
+        long opsPerSecond = (ITERATIONS * 1000L) / (System.currentTimeMillis() - start);
         waitForEventProcessorSequence(expectedCount);
         processor.halt();
 
-        return perfTestContext;
+        return opsPerSecond;
     }
 
     private void waitForEventProcessorSequence(long expectedCount)
@@ -93,10 +90,9 @@ public class OneToOneOnHeapThroughputTest extends AbstractPerfTestDisruptor
         new OneToOneOnHeapThroughputTest().testImplementations();
     }
 
-    public static class ByteBufferHandler implements EventHandler<ByteBuffer>, BatchStartAware
+    public static class ByteBufferHandler implements EventHandler<ByteBuffer>
     {
-        private final PaddedLong total = new PaddedLong();
-        private final PaddedLong batchesProcessed = new PaddedLong();
+        private long total = 0;
         private long expectedCount;
         private CountDownLatch latch;
 
@@ -105,7 +101,7 @@ public class OneToOneOnHeapThroughputTest extends AbstractPerfTestDisruptor
         {
             for (int i = 0; i < BLOCK_SIZE; i += 8)
             {
-                total.set(total.get() + event.getLong(i));
+                total += event.getLong(i);
             }
 
             if (--expectedCount == 0)
@@ -116,26 +112,13 @@ public class OneToOneOnHeapThroughputTest extends AbstractPerfTestDisruptor
 
         public long getTotal()
         {
-            return total.get();
-        }
-
-        public long getBatchesProcessed()
-        {
-            return batchesProcessed.get();
+            return total;
         }
 
         public void reset(CountDownLatch latch, long expectedCount)
         {
             this.latch = latch;
             this.expectedCount = expectedCount;
-            this.total.set(0);
-            this.batchesProcessed.set(0);
-        }
-
-        @Override
-        public void onBatchStart(long batchSize)
-        {
-            batchesProcessed.increment();
         }
     }
 

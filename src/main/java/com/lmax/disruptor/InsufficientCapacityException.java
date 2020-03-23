@@ -16,14 +16,9 @@
 package com.lmax.disruptor;
 
 /**
- * 空间不足异常，在申请共享数据结构的空间时可能抛出。
- * 用异常代理其它返回值，受检异常，在编码时就需要显示处理。
- *
- * 为了性能考虑，该异常没有堆栈信息，并且是单例的。
  * <p>Exception thrown when it is not possible to insert a value into
  * the ring buffer without it wrapping the consuming sequences.  Used
  * specifically when claiming with the {@link RingBuffer#tryNext()} call.</p>
- *
  *
  * <p>For efficiency this exception will not have a stack trace.</p>
  */
@@ -38,7 +33,7 @@ public final class InsufficientCapacityException extends Exception
     }
 
     @Override
-    public Throwable fillInStackTrace()
+    public synchronized Throwable fillInStackTrace()
     {
         return this;
     }

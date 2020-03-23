@@ -19,7 +19,13 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import com.lmax.disruptor.*;
+import com.lmax.disruptor.AbstractPerfTestDisruptor;
+import com.lmax.disruptor.Sequence;
+import com.lmax.disruptor.SequenceBarrier;
+import com.lmax.disruptor.Sequenced;
+import com.lmax.disruptor.Sequencer;
+import com.lmax.disruptor.SingleProducerSequencer;
+import com.lmax.disruptor.YieldingWaitStrategy;
 import com.lmax.disruptor.util.DaemonThreadFactory;
 
 /**
@@ -89,9 +95,8 @@ public final class OneToOneRawBatchThroughputTest extends AbstractPerfTestDisrup
     }
 
     @Override
-    protected PerfTestContext runDisruptorPass() throws InterruptedException
+    protected long runDisruptorPass() throws InterruptedException
     {
-        PerfTestContext perfTestContext = new PerfTestContext();
         int batchSize = 10;
         final CountDownLatch latch = new CountDownLatch(1);
         long expectedCount = myRunnable.sequence.get() + (ITERATIONS * batchSize);
@@ -109,10 +114,10 @@ public final class OneToOneRawBatchThroughputTest extends AbstractPerfTestDisrup
 
         latch.await();
         long end = System.currentTimeMillis();
-        perfTestContext.setDisruptorOps((ITERATIONS * 1000L * batchSize) / (end - start));
+        long opsPerSecond = (ITERATIONS * 1000L * batchSize) / (end - start);
         waitForEventProcessorSequence(expectedCount);
 
-        return perfTestContext;
+        return opsPerSecond;
     }
 
     private void waitForEventProcessorSequence(long expectedCount) throws InterruptedException

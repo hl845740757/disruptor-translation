@@ -19,11 +19,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
- * 批量事件处理器，一个单线程的消费者(只有一个EventProcessor)
- * 代理EventHandler，管理处理事件以外的其他事情(如：拉取事件，等待事件...)。
- * <p>
- * 如果{@link EventHandler}实现了{@link LifecycleAware}，那么在线程启动后停止前将会收到一个通知。
- *
  * Convenience class for handling the batching semantics of consuming entries from a {@link RingBuffer}
  * and delegating the available events to an {@link EventHandler}.
  * <p>
@@ -35,50 +30,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class BatchEventProcessor<T>
     implements EventProcessor
 {
-	/**
-	 * 闲置状态
-	 */
     private static final int IDLE = 0;
-	/**
-	 * 暂停状态
-	 */
-	private static final int HALTED = IDLE + 1;
-	/**
-	 * 运行状态
-	 */
+    private static final int HALTED = IDLE + 1;
     private static final int RUNNING = HALTED + 1;
 
-	/**
-	 * 运行状态标记
-	 */
-	private final AtomicInteger running = new AtomicInteger(IDLE);
-	/**
-	 * 处理事件时的异常处理器
-	 * 警告！！！
-	 * 默认的异常处理器{@link com.lmax.disruptor.dsl.Disruptor#exceptionHandler}，在出现异常时会打断运行，会导致死锁！
-	 */
+    private final AtomicInteger running = new AtomicInteger(IDLE);
     private ExceptionHandler<? super T> exceptionHandler = new FatalExceptionHandler();
-	/**
-	 * 数据提供者(RingBuffer)
-	 */
-	private final DataProvider<T> dataProvider;
-	/**
-	 * 消费者依赖的屏障，用于协调该消费者与生产者/其他消费者之间的速度。
-	 */
+    private final DataProvider<T> dataProvider;
     private final SequenceBarrier sequenceBarrier;
-	/**
-	 * 事件处理方法，真正处理事件的对象
-	 */
-	private final EventHandler<? super T> eventHandler;
-	/**
-	 * 消费者的消费进度
-	 */
-	private final Sequence sequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE);
-
+    private final EventHandler<? super T> eventHandler;
+    private final Sequence sequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE);
     private final TimeoutHandler timeoutHandler;
-    /**
-     * 批处理开始时的通知器
-     */
     private final BatchStartAware batchStartAware;
 
     /**
@@ -98,7 +60,6 @@ public final class BatchEventProcessor<T>
         this.sequenceBarrier = sequenceBarrier;
         this.eventHandler = eventHandler;
 
-		// 如果eventHandler还实现了其他接口
         if (eventHandler instanceof SequenceReportingEventHandler)
         {
             ((SequenceReportingEventHandler<?>) eventHandler).setSequenceCallback(sequence);
@@ -119,7 +80,6 @@ public final class BatchEventProcessor<T>
     @Override
     public void halt()
     {
-        // 标记已被中断，如果事件处理器在屏障上等待，那么需要“唤醒”事件处理器，响应中断/停止请求。
         running.set(HALTED);
         sequenceBarrier.alert();
     }
@@ -146,21 +106,17 @@ public final class BatchEventProcessor<T>
     }
 
     /**
-	 * 暂停以后交给下一个线程继续执行是线程安全的
-	 * It is ok to have another thread rerun this method after a halt().
+     * It is ok to have another thread rerun this method after a halt().
+     *
      * @throws IllegalStateException if this object instance is already running in a thread
      */
     @Override
     public void run()
     {
-    	// 原子变量，当能从IDLE切换到RUNNING状态时，前一个线程一定退出了run()
-		// 具备happens-before原则，上一个线程修改的状态对于新线程是可见的。
         if (running.compareAndSet(IDLE, RUNNING))
         {
-            // 检查中断、停止请求
             sequenceBarrier.clearAlert();
-            // 通知已启动
-            // 警告：如果抛出异常将导致线程终止，小心死锁风险。此外：notifyShutdown 也不会被调用。
+
             notifyStart();
             try
             {
@@ -171,10 +127,7 @@ public final class BatchEventProcessor<T>
             }
             finally
             {
-                // notifyStart调用成功才会走到这里
                 notifyShutdown();
-                // 在退出的时候会恢复到IDLE状态，且是原子变量，具备happens-before原则
-				// 由volatile支持
                 running.set(IDLE);
             }
         }
@@ -189,37 +142,26 @@ public final class BatchEventProcessor<T>
             }
             else
             {
-                // 到这里可能是running状态，主要是lmax支持的多了，如果不允许重用，线程退出时(notifyShutdown后)不修改为idle状态，那么便不存在该问题。
                 earlyExit();
             }
         }
     }
 
-	/**
-	 * 处理事件，核心逻辑
-	 */
-	private void processEvents()
+    private void processEvents()
     {
-        T event = null;// 减少变量定义
-        // 下一个消费的序号， -1 到 0，这个很重要，对于理解 WorkProcessor有帮助
-		// -1是不需要消费的，第一个要消费的是0
+        T event = null;
         long nextSequence = sequence.get() + 1L;
 
-        // 死循环，因此不会让出线程，需要独立的线程(每一个EventProcessor都需要独立的线程)
         while (true)
         {
             try
             {
-            	// 通过屏障获取到的最大可用序号，比起自己去查询的话，类自身就简单干净一些，复用性更好
                 final long availableSequence = sequenceBarrier.waitFor(nextSequence);
                 if (batchStartAware != null)
                 {
-                	// 批量处理事件开始时发送通知
                     batchStartAware.onBatchStart(availableSequence - nextSequence + 1);
                 }
 
-                // 批量消费
-				// 没有其它事件处理器和我竞争序号，这些序号我都是可以消费的
                 while (nextSequence <= availableSequence)
                 {
                     event = dataProvider.get(nextSequence);
@@ -227,17 +169,14 @@ public final class BatchEventProcessor<T>
                     nextSequence++;
                 }
 
-                // 更新消费进度(批量消费，每次消费只更新一次Sequence，减少性能消耗	)
                 sequence.set(availableSequence);
             }
             catch (final TimeoutException e)
             {
-                // 等待sequence超时，进行重试
                 notifyTimeout(sequence.get());
             }
             catch (final AlertException ex)
             {
-                // 检查到中断/停止请求，如果发现已经不是运行状态，则退出while死循环
                 if (running.get() != RUNNING)
                 {
                     break;
@@ -245,15 +184,7 @@ public final class BatchEventProcessor<T>
             }
             catch (final Throwable ex)
             {
-            	// 警告：如果在处理异常时抛出新的异常，会导致跳出while循环，导致BatchEventProcessor停止工作，可能导致死锁
-				// 而系统默认的异常处理会将其包装为RuntimeException！！！
                 exceptionHandler.handleEventException(ex, nextSequence, event);
-
-				// 成功处理异常后标记当前事件已被处理
-				// 警告：如果自己实现的等待策略，抛出了TimeoutException、AlertException以外的异常，从而走到这里，将导致该sequence被跳过！
-                // 从而导致数据/信号丢失！严重bug！
-                // 严格的说，lmax这里的实现对于扩展并不是特别的安全， 安全一点的话，使用两个try块更加安全，
-                // 一个try块负责获取availableSequence，第二个try块负责事件处理
                 sequence.set(nextSequence);
                 nextSequence++;
             }
@@ -282,8 +213,6 @@ public final class BatchEventProcessor<T>
     }
 
     /**
-     * 通知{@link EventHandler}事件处理器启动了
-     *
      * Notifies the EventHandler when this processor is starting up
      */
     private void notifyStart()
@@ -296,7 +225,6 @@ public final class BatchEventProcessor<T>
             }
             catch (final Throwable ex)
             {
-                // 警告：如果这里抛出了新异常，将导致线程终止！小心死锁风险。
                 exceptionHandler.handleOnStartException(ex);
             }
         }

@@ -23,9 +23,6 @@ import com.lmax.disruptor.SequenceBarrier;
 import java.util.concurrent.Executor;
 
 /**
- * 单事件处理器消费者信息。
- * (单线程事件处理器的消费者,单个EventProcessor处理所有的事件)
- *
  * <p>Wrapper class to tie together a particular event processing stage</p>
  * <p>
  * <p>Tracks the event processor instance, the event handler instance, and sequence barrier which the stage is attached to.</p>
@@ -34,24 +31,10 @@ import java.util.concurrent.Executor;
  */
 class EventProcessorInfo<T> implements ConsumerInfo
 {
-	/**
-	 * 事件处理器，该EventProcessor用于处理所有的事件。
-	 * {@link com.lmax.disruptor.BatchEventProcessor}
-	 * {@link com.lmax.disruptor.WorkProcessor}
-	 */
     private final EventProcessor eventprocessor;
-	/**
-	 * 事件处理方法
-	 */
-	private final EventHandler<? super T> handler;
-	/**
-	 * 消费者的序列屏障
-	 */
-	private final SequenceBarrier barrier;
-	/**
-	 * 是否是消费链的末端消费者(没有后继消费者)
-	 */
-	private boolean endOfChain = true;
+    private final EventHandler<? super T> handler;
+    private final SequenceBarrier barrier;
+    private boolean endOfChain = true;
 
     EventProcessorInfo(
         final EventProcessor eventprocessor, final EventHandler<? super T> handler, final SequenceBarrier barrier)
@@ -101,6 +84,9 @@ class EventProcessorInfo<T> implements ConsumerInfo
         eventprocessor.halt();
     }
 
+    /**
+     *
+     */
     @Override
     public void markAsUsedInBarrier()
     {

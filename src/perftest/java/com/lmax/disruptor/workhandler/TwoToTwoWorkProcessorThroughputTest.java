@@ -23,7 +23,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.LockSupport;
 
-import com.lmax.disruptor.*;
+import com.lmax.disruptor.AbstractPerfTestDisruptor;
+import com.lmax.disruptor.BusySpinWaitStrategy;
+import com.lmax.disruptor.IgnoreExceptionHandler;
+import com.lmax.disruptor.RingBuffer;
+import com.lmax.disruptor.Sequence;
+import com.lmax.disruptor.SequenceBarrier;
+import com.lmax.disruptor.WorkProcessor;
 import com.lmax.disruptor.support.ValueAdditionWorkHandler;
 import com.lmax.disruptor.support.ValueEvent;
 import com.lmax.disruptor.support.ValuePublisher;
@@ -105,9 +111,8 @@ public final class TwoToTwoWorkProcessorThroughputTest extends AbstractPerfTestD
     }
 
     @Override
-    protected PerfTestContext runDisruptorPass() throws Exception
+    protected long runDisruptorPass() throws Exception
     {
-        PerfTestContext perfTestContext = new PerfTestContext();
         long expected = ringBuffer.getCursor() + (NUM_PUBLISHERS * ITERATIONS);
         Future<?>[] futures = new Future[NUM_PUBLISHERS];
         for (int i = 0; i < NUM_PUBLISHERS; i++)
@@ -133,7 +138,7 @@ public final class TwoToTwoWorkProcessorThroughputTest extends AbstractPerfTestD
             LockSupport.parkNanos(1L);
         }
 
-        perfTestContext.setDisruptorOps((ITERATIONS * 1000L) / (System.currentTimeMillis() - start));
+        long opsPerSecond = (ITERATIONS * 1000L) / (System.currentTimeMillis() - start);
 
         Thread.sleep(1000);
 
@@ -142,7 +147,7 @@ public final class TwoToTwoWorkProcessorThroughputTest extends AbstractPerfTestD
             processor.halt();
         }
 
-        return perfTestContext;
+        return opsPerSecond;
     }
 
     public static void main(String[] args) throws Exception

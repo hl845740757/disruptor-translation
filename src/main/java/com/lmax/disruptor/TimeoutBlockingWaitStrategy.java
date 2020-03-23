@@ -1,22 +1,14 @@
 package com.lmax.disruptor;
 
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
-import static com.lmax.disruptor.util.Util.awaitNanos;
-
-/**
- * 等待固定时间，如果超时仍不可用，则抛出超时异常
- *
- * Blocking strategy that uses a lock and condition variable for {@link EventProcessor}s waiting on a barrier.
- * However it will periodically wake up if it has been idle for specified period by throwing a
- * {@link TimeoutException}.  To make use of this, the event handler class should implement the {@link TimeoutHandler},
- * which the {@link BatchEventProcessor} will call if the timeout occurs.
- * <p>
- * This strategy can be used when throughput and low-latency are not as important as CPU resource.
- */
 public class TimeoutBlockingWaitStrategy implements WaitStrategy
 {
-    private final Object mutex = new Object();
+    private final Lock lock = new ReentrantLock();
+    private final Condition processorNotifyCondition = lock.newCondition();
     private final long timeoutInNanos;
 
     public TimeoutBlockingWaitStrategy(final long timeout, final TimeUnit units)
@@ -32,23 +24,27 @@ public class TimeoutBlockingWaitStrategy implements WaitStrategy
         final SequenceBarrier barrier)
         throws AlertException, InterruptedException, TimeoutException
     {
-        long timeoutNanos = timeoutInNanos;
+        long nanos = timeoutInNanos;
 
         long availableSequence;
         if (cursorSequence.get() < sequence)
         {
-            synchronized (mutex)
+            lock.lock();
+            try
             {
                 while (cursorSequence.get() < sequence)
                 {
-					// 类似在执行耗时方法之前，检查中断标记(提高中断响应性)
                     barrier.checkAlert();
-                    timeoutNanos = awaitNanos(mutex, timeoutNanos);
-                    if (timeoutNanos <= 0)
+                    nanos = processorNotifyCondition.awaitNanos(nanos);
+                    if (nanos <= 0)
                     {
                         throw TimeoutException.INSTANCE;
                     }
                 }
+            }
+            finally
+            {
+                lock.unlock();
             }
         }
 
@@ -63,9 +59,14 @@ public class TimeoutBlockingWaitStrategy implements WaitStrategy
     @Override
     public void signalAllWhenBlocking()
     {
-        synchronized (mutex)
+        lock.lock();
+        try
         {
-            mutex.notifyAll();
+            processorNotifyCondition.signalAll();
+        }
+        finally
+        {
+            lock.unlock();
         }
     }
 
@@ -73,8 +74,7 @@ public class TimeoutBlockingWaitStrategy implements WaitStrategy
     public String toString()
     {
         return "TimeoutBlockingWaitStrategy{" +
-            "mutex=" + mutex +
-            ", timeoutInNanos=" + timeoutInNanos +
+            "processorNotifyCondition=" + processorNotifyCondition +
             '}';
     }
 }

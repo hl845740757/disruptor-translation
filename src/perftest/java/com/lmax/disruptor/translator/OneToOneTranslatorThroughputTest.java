@@ -15,7 +15,10 @@
  */
 package com.lmax.disruptor.translator;
 
-import com.lmax.disruptor.*;
+import com.lmax.disruptor.AbstractPerfTestDisruptor;
+import com.lmax.disruptor.EventTranslatorOneArg;
+import com.lmax.disruptor.RingBuffer;
+import com.lmax.disruptor.YieldingWaitStrategy;
 import com.lmax.disruptor.dsl.Disruptor;
 import com.lmax.disruptor.dsl.ProducerType;
 import com.lmax.disruptor.support.PerfTestUtil;
@@ -90,9 +93,8 @@ public final class OneToOneTranslatorThroughputTest extends AbstractPerfTestDisr
     }
 
     @Override
-    protected PerfTestContext runDisruptorPass() throws InterruptedException
+    protected long runDisruptorPass() throws InterruptedException
     {
-        PerfTestContext perfTestContext = new PerfTestContext();
         MutableLong value = this.value;
 
         final CountDownLatch latch = new CountDownLatch(1);
@@ -110,13 +112,12 @@ public final class OneToOneTranslatorThroughputTest extends AbstractPerfTestDisr
         }
 
         latch.await();
-        perfTestContext.setDisruptorOps((ITERATIONS * 1000L) / (System.currentTimeMillis() - start));
-        perfTestContext.setBatchData(handler.getBatchesProcessed(), ITERATIONS);
+        long opsPerSecond = (ITERATIONS * 1000L) / (System.currentTimeMillis() - start);
         waitForEventProcessorSequence(expectedCount);
 
         failIfNot(expectedResult, handler.getValue());
 
-        return perfTestContext;
+        return opsPerSecond;
     }
 
     private static class Translator implements EventTranslatorOneArg<ValueEvent, MutableLong>

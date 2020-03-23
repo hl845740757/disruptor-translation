@@ -15,15 +15,14 @@
  */
 package com.lmax.disruptor;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
 import com.lmax.disruptor.util.ThreadHints;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
 /**
- * 更轻量级的阻塞等待策略，注释参考{@link BlockingWaitStrategy}。
- * <p>
- * 特征：延迟较高、吞吐量也较低，但是CPU使用率极低，适合那些延迟和吞吐量并不太重要的场景，或CPU资源紧缺的场景。
- *
  * Variation of the {@link BlockingWaitStrategy} that attempts to elide conditional wake-ups when
  * the lock is uncontended.  Shows performance improvements on microbenchmarks.  However this
  * wait strategy should be considered experimental as I have not full proved the correctness of
@@ -31,23 +30,23 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class LiteBlockingWaitStrategy implements WaitStrategy
 {
-    private final Object mutex = new Object();
+    private final Lock lock = new ReentrantLock();
+    private final Condition processorNotifyCondition = lock.newCondition();
     private final AtomicBoolean signalNeeded = new AtomicBoolean(false);
-
 
     @Override
     public long waitFor(long sequence, Sequence cursorSequence, Sequence dependentSequence, SequenceBarrier barrier)
         throws AlertException, InterruptedException
     {
         long availableSequence;
-        // 确保生产者生产了对应的数据
         if (cursorSequence.get() < sequence)
         {
-            synchronized (mutex)
+            lock.lock();
+
+            try
             {
                 do
                 {
-                	// 在这里做了一些优化，只有真正有线程等待时，才需要通知
                     signalNeeded.getAndSet(true);
 
                     if (cursorSequence.get() >= sequence)
@@ -55,11 +54,14 @@ public final class LiteBlockingWaitStrategy implements WaitStrategy
                         break;
                     }
 
-                    // 可理解为，在执行耗时操作之前检查中断(提高中断响应性)
                     barrier.checkAlert();
-                    mutex.wait();
+                    processorNotifyCondition.await();
                 }
                 while (cursorSequence.get() < sequence);
+            }
+            finally
+            {
+                lock.unlock();
             }
         }
 
@@ -77,10 +79,14 @@ public final class LiteBlockingWaitStrategy implements WaitStrategy
     {
         if (signalNeeded.getAndSet(false))
         {
-            // 走到这里表示需要进行通知
-            synchronized (mutex)
+            lock.lock();
+            try
             {
-                mutex.notifyAll();
+                processorNotifyCondition.signalAll();
+            }
+            finally
+            {
+                lock.unlock();
             }
         }
     }
@@ -89,8 +95,7 @@ public final class LiteBlockingWaitStrategy implements WaitStrategy
     public String toString()
     {
         return "LiteBlockingWaitStrategy{" +
-            "mutex=" + mutex +
-            ", signalNeeded=" + signalNeeded +
+            "processorNotifyCondition=" + processorNotifyCondition +
             '}';
     }
 }

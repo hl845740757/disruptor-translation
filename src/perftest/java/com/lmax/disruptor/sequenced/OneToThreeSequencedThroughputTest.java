@@ -22,7 +22,11 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import com.lmax.disruptor.*;
+import com.lmax.disruptor.AbstractPerfTestDisruptor;
+import com.lmax.disruptor.BatchEventProcessor;
+import com.lmax.disruptor.RingBuffer;
+import com.lmax.disruptor.SequenceBarrier;
+import com.lmax.disruptor.YieldingWaitStrategy;
 import com.lmax.disruptor.support.Operation;
 import com.lmax.disruptor.support.ValueEvent;
 import com.lmax.disruptor.support.ValueMutationEventHandler;
@@ -123,9 +127,8 @@ public final class OneToThreeSequencedThroughputTest extends AbstractPerfTestDis
     }
 
     @Override
-    protected PerfTestContext runDisruptorPass() throws InterruptedException
+    protected long runDisruptorPass() throws InterruptedException
     {
-        PerfTestContext perfTestContext = new PerfTestContext();
         CountDownLatch latch = new CountDownLatch(NUM_EVENT_PROCESSORS);
         for (int i = 0; i < NUM_EVENT_PROCESSORS; i++)
         {
@@ -143,25 +146,14 @@ public final class OneToThreeSequencedThroughputTest extends AbstractPerfTestDis
         }
 
         latch.await();
-        perfTestContext.setDisruptorOps((ITERATIONS * 1000L) / (System.currentTimeMillis() - start));
-        perfTestContext.setBatchData(sumBatches(handlers), ITERATIONS * handlers.length);
+        long opsPerSecond = (ITERATIONS * 1000L) / (System.currentTimeMillis() - start);
         for (int i = 0; i < NUM_EVENT_PROCESSORS; i++)
         {
             batchEventProcessors[i].halt();
             failIfNot(results[i], handlers[i].getValue());
         }
 
-        return perfTestContext;
-    }
-
-    private long sumBatches(ValueMutationEventHandler[] handlers)
-    {
-        long sum = 0;
-        for (ValueMutationEventHandler handler : handlers)
-        {
-            sum += handler.getBatchesProcessed();
-        }
-        return sum;
+        return opsPerSecond;
     }
 
     public static void main(String[] args) throws Exception
