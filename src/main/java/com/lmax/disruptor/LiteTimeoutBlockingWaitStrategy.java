@@ -11,6 +11,9 @@ import java.util.concurrent.locks.ReentrantLock;
  * 如果生产者生产速率不够，则阻塞式等待生产者一段时间。
  * 如果是等待依赖的其它消费者，则轮询式等待。
  *
+ * 警告：与{@link TimeoutBlockingWaitStrategy}不同，消费者可能在有可消费者的事件时仍然处理阻塞状态，因此使用该策略时超时时间不可以太长。
+ * 如果不需要精确的等待通知策略，该该策略可能在多数情况下都优于{@link TimeoutBlockingWaitStrategy}。
+ *
  * Variation of the {@link TimeoutBlockingWaitStrategy} that attempts to elide conditional wake-ups
  * when the lock is uncontended.
  */
@@ -76,6 +79,8 @@ public class LiteTimeoutBlockingWaitStrategy implements WaitStrategy
     @Override
     public void signalAllWhenBlocking()
     {
+        // 注意：由于这里并未先获取锁，因此即使这里getAndSet认为不需要通知，消费者可能立即又赋值为true
+        // 从而导致这里并未进行通知，而消费者将会阻塞，直到超时或下一个事件到达
         if (signalNeeded.getAndSet(false))
         {
             lock.lock();
