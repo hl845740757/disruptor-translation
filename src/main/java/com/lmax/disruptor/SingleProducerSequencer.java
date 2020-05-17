@@ -44,7 +44,7 @@ abstract class SingleProducerSequencerFields extends SingleProducerSequencerPad
      * 已预分配的序号缓存，因为是单线程的生产者，不存在竞争，因此采用普通的long变量
      * 表示 {@link #cursor} +1 ~  nextValue 这段空间被预分配出去了，但是可能还未填充数据。
      *
-     * 会在真正分配空间是更新
+     * 会在真正分配空间时更新
      * {@link SingleProducerSequencer#tryNext(int)}
      * {@link SingleProducerSequencer#next(int)}
      * 
@@ -52,13 +52,22 @@ abstract class SingleProducerSequencerFields extends SingleProducerSequencerPad
      */
     long nextValue = Sequence.INITIAL_VALUE;
     /**
-     * 网关序列的最小序号(最慢消费进度)，对上次遍历结果的缓存，减少遍历操作(遍历涉及大量volatile读)。
+     * 网关序列的最小序号缓存。
      * 因为是单线程的生产者，数据无竞争，因此使用普通的long变量即可。
      *
      * 在运行期间不调用{@link #claim(long)}的情况下：
      * 1.该缓存值是单调递增的，只会变大不会变小 2. cachedValue <= nextValue
      * 如果在运行期间调用了{@link #claim(long)}
      * 可能造成cachedValue > nextValue
+     *
+     * <p>
+     * Q: 该缓存值的作用？
+     * A: 除了直观上的减少对{@link #gatingSequences}的遍历产生的volatile读以外，还可以提高缓存命中率。
+     * <p>
+     * 由于消费者的{@link Sequence}变更较为频繁，因此消费者的{@link Sequence}的缓存极易失效。
+     * 如果生产者频繁读取消费者的{@link Sequence}，极易遇见缓存失效问题（伪共享），从而影响性能。
+     * 通过缓存一个值（在必要的时候更新），可以极大的减少对消费者的{@link Sequence}的读操作，从而提高性能。
+     * PS: 使用一个变化频率较低的值代替一个变化频率较高的值，提高读效率。
      *
      * 在每次查询消费者的进度后，就会对它进行缓存
      * 会在{@link SingleProducerSequencer#hasAvailableCapacity(int, boolean)}

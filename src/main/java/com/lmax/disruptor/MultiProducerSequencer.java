@@ -48,11 +48,19 @@ public final class MultiProducerSequencer extends AbstractSequencer
 	 * 在任何时候查询了消费者进度信息时都需要更新它。
 	 * 某些时候可以减少{@link #gatingSequences}的遍历(减少volatile读操作)。
 	 *
-	 * Util.getMinimumSequence(gatingSequences, current)的查询结果是递增的，但是缓存结果不一定的是递增，变量的更新存在竞态条件，
+	 * Util.getMinimumSequence(gatingSequences, current)的查询结果是递增的，但是缓存结果不一定是递增的，变量的更新存在竞态条件，
 	 * 它可能会被设置为一个更小的值。
+     *
+     * <p>
+     * Q: 为什么使用{@link Sequence}类，而不是普通的 volatile long？
+     * A: 为了避免与其它数据产生伪共享，提高读效率。
+     * <p>
+     * 该缓存值，除了直观上的减少对{@link #gatingSequences}的遍历产生的volatile读以外，还可以提高缓存命中率。
+     * 由于消费者的{@link Sequence}变更较为频繁，因此消费者的{@link Sequence}的缓存极易失效。
+     * 如果生产者频繁读取消费者的{@link Sequence}，极易遇见缓存失效问题（伪共享），从而影响性能。
+     * 通过缓存一个值（在必要的时候更新），可以极大的减少对消费者的{@link Sequence}的读操作，从而提高性能。
+     * PS: 使用一个变化频率较低的值代替一个变化频率较高的值，提高读效率。
 	 *
-	 * gatingSequenceCache 的更新采用的都是set,因为本身就可能设置为一个错误的值(更小的值)，使用volatile写也无法解决该问题，
-	 * 使用set可以减少内存屏障消耗
 	 * {@link SingleProducerSequencerFields#cachedValue}
 	 */
     private final Sequence gatingSequenceCache = new Sequence(Sequencer.INITIAL_CURSOR_VALUE);
@@ -119,15 +127,15 @@ public final class MultiProducerSequencer extends AbstractSequencer
         long cachedGatingSequence = gatingSequenceCache.get();
 
 		// 1.wrapPoint > cachedGatingSequence 表示生产者追上消费者产生环路，上次看见的序号缓存无效，还需要更多的空间
-		// 2.cachedGatingSequence > nextValue 表示消费者的进度大于当前生产者进度，current无效，- 竞态更新gatingSequenceCache可能导致该情况
+		// 2.cachedGatingSequence > cursorValue 表示消费者的进度大于当前生产者进度，cachedGatingSequence无效，- 竞态更新gatingSequenceCache可能导致该情况
 		// 当其它生产者竞争成功，发布的数据也被消费者消费了时可能产生。(如2生产者1个消费者)
-        // 无锁算法(CAS)都是比较烧脑的算法，尽量不要自己设计，交给大师们设计。
         if (wrapPoint > cachedGatingSequence || cachedGatingSequence > cursorValue)
         {
             // 缓存无效，尝试更新一下缓存
             long minSequence = Util.getMinimumSequence(gatingSequences, cursorValue);
             // 这里存在竞态条件，多线程模式下，可能会被设置为多个线程看见的结果中的任意一个。
-            // 可能比 cachedGatingSequence更小，可能比cursorValue更大
+            // 可能比 cachedGatingSequence更小，可能比cursorValue更大。
+            // 但该竞争是良性的，产生的结果是可控的，不会导致错误
             gatingSequenceCache.set(minSequence);
 
             // 是否产生环路/追尾
@@ -203,7 +211,7 @@ public final class MultiProducerSequencer extends AbstractSequencer
         long current;
         long next;
 
-		// 使用缓存导致太复杂
+		// 使用缓存增加了复杂度
         do
         {
             current = cursor.get();
@@ -216,15 +224,15 @@ public final class MultiProducerSequencer extends AbstractSequencer
 
             // 第一步：空间不足就继续等待。
 			// wrapPoint > cachedGatingSequence 表示生产者追上消费者产生环路，上次看见的序号缓存无效，还需要更多的空间
-			// cachedGatingSequence > nextValue 表示消费者的进度大于当前生产者进度，current无效 - 竞态更新gatingSequenceCache可能导致该情况
+			// cachedGatingSequence > nextValue 表示消费者的进度大于当前生产者进度，cachedGatingSequence无效 - 竞态更新gatingSequenceCache可能导致该情况
 			// 当其它生产者竞争成功，发布的数据也被消费者消费了时可能产生。(如2生产者1个消费者)
-			// 无锁算法(CAS)都是比较烧脑的算法，尽量不要自己设计，交给大师们设计。
             if (wrapPoint > cachedGatingSequence || cachedGatingSequence > current)
             {
                 // 走进这里表示当前缓存对我来说没有帮助，尝试获取最新的消费者进度
                 long gatingSequence = Util.getMinimumSequence(gatingSequences, current);
 
-                // 消费者最新的进度仍然与我构成了环路，那么只能重试，减少不必要的缓存更新
+                // 消费者最新的进度仍然与我构成了环路，那么只能重试
+                // wrapPoint > gatingSequence 意外着 gatingSequence无效，因为生产者期待的是一个大于等于wrapPoint的值
                 if (wrapPoint > gatingSequence)
                 {
                     // 这里和查询是否用足够空间的区别，会停顿一下生产者，减少竞争程度
