@@ -38,7 +38,6 @@ abstract class RingBufferFields<E> extends RingBufferPad
     private static final int REF_ELEMENT_SHIFT;
     private static final Unsafe UNSAFE = Util.getUnsafe();
 
-    // 这块代码没有看的太明白，大致意思是计算被缓存行填充后的数据起始偏移量
     static
     {
         final int scale = UNSAFE.arrayIndexScale(Object[].class);
@@ -54,7 +53,11 @@ abstract class RingBufferFields<E> extends RingBufferPad
         {
             throw new IllegalStateException("Unknown pointer size");
         }
+        // 这里前后各填充了128字节，和Disruptor的其它设计并不一致，其它地方都是64字节，当然128兼容64
         BUFFER_PAD = 128 / scale;
+        // Q: 这里是什么意思？
+        // A: 因为数组的前后我们都进行了填充，以避免有效载荷和其它成员产生伪共享，
+        // 因此我们需要在数组的起始偏移量上，再加上我们填充的那一段，才是我们有效载荷的起始偏移量
         // Including the buffer pad in the array base offset
         REF_ARRAY_BASE = UNSAFE.arrayBaseOffset(Object[].class) + (BUFFER_PAD << REF_ELEMENT_SHIFT);
     }
@@ -94,7 +97,7 @@ abstract class RingBufferFields<E> extends RingBufferPad
 
         // 掩码
         this.indexMask = bufferSize - 1;
-        // 额外创建 2个填充空间的大小，首尾填充，比较数组和其他对象加载到同一个缓存行。
+        // 额外创建 2个填充空间的大小，首尾填充，避免数组的有效载荷和其它成员加载到同一缓存行。
         this.entries = new Object[sequencer.getBufferSize() + 2 * BUFFER_PAD];
         fill(eventFactory);
     }
@@ -106,6 +109,7 @@ abstract class RingBufferFields<E> extends RingBufferPad
     {
         for (int i = 0; i < bufferSize; i++)
         {
+            // BUFFER_PAD + i为真正的数组索引
             entries[BUFFER_PAD + i] = eventFactory.newInstance();
         }
     }
@@ -113,9 +117,6 @@ abstract class RingBufferFields<E> extends RingBufferPad
     @SuppressWarnings("unchecked")
     protected final E elementAt(long sequence)
     {
-        // elementIndex = sequence & indexMask (后多少位是有效数字，前面的是倍数不需要被关心)
-        // addressElementOffset = elementIndex << REF_ELEMENT_SHIFT (这里使用了移位运算代替乘法)
-        // addressElementOffset = elementIndex * perElementOffset
         return (E) UNSAFE.getObject(entries, REF_ARRAY_BASE + ((sequence & indexMask) << REF_ELEMENT_SHIFT));
     }
 }
