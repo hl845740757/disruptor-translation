@@ -31,6 +31,8 @@ import sun.misc.Unsafe;
 public final class Util
 {
     /**
+	 * 计算X靠近的下一个2的n次幂
+	 *
      * Calculate the next power of 2, greater than or equal to x.<p>
      * From Hacker's Delight, Chapter 3, Harry S. Warren Jr.
      *
@@ -43,10 +45,14 @@ public final class Util
     }
 
     /**
+	 * 找出Sequence中序号最小的Sequence的序号
+	 *
      * Get the minimum sequence from an array of {@link com.lmax.disruptor.Sequence}s.
      *
      * @param sequences to compare.
      * @return the minimum sequence found or Long.MAX_VALUE if the array is empty.
+	 * 			如果数组为空，则返回Long.MAX_VALUE。
+	 * 			为何不返回{@link com.lmax.disruptor.Sequencer#INITIAL_CURSOR_VALUE}
      */
     public static long getMinimumSequence(final Sequence[] sequences)
     {
@@ -54,6 +60,7 @@ public final class Util
     }
 
     /**
+	 * 找出Sequence中序号最小的Sequence的序号。
      * Get the minimum sequence from an array of {@link com.lmax.disruptor.Sequence}s.
      *
      * @param sequences to compare.
@@ -74,6 +81,7 @@ public final class Util
     }
 
     /**
+	 * 获取给定的EventProcessor的序列数组。
      * Get an array of {@link Sequence}s for the passed {@link EventProcessor}s
      *
      * @param processors for which to get the sequences
@@ -126,6 +134,7 @@ public final class Util
     }
 
     /**
+	 * 计算以2为底，i的对数
      * Calculate the log base 2 of the supplied integer, essentially reports the location
      * of the highest bit.
      *

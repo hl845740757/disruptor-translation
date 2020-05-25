@@ -19,6 +19,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
+ * 执行忽略的异常异常处理器，仅仅打个日志
+ *
  * Convenience implementation of an exception handler that using standard JDK logging to log
  * the exception as {@link Level}.INFO
  */

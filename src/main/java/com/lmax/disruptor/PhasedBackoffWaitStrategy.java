@@ -18,6 +18,8 @@ package com.lmax.disruptor;
 import java.util.concurrent.TimeUnit;
 
 /**
+ * 分阶段性的等待策略，在不同的等阶阶段采用不同的方式等待。
+ *
  * <p>Phased wait strategy for waiting {@link EventProcessor}s on a barrier.</p>
  *
  * <p>This strategy can be used when throughput and low-latency are not as important as CPU resource.

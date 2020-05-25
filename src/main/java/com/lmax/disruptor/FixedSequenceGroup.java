@@ -20,6 +20,10 @@ import java.util.Arrays;
 import com.lmax.disruptor.util.Util;
 
 /**
+ * 固定Sequence数量的Sequence组
+ * 用一个对象代替一组对象.(隐藏一些细节，eg:隐藏查找序号最小的Sequence)
+ * 只支持获取，不支持更新
+ *
  * Hides a group of Sequences behind a single Sequence
  */
 public final class FixedSequenceGroup extends Sequence
@@ -37,7 +41,9 @@ public final class FixedSequenceGroup extends Sequence
     }
 
     /**
-     * Get the minimum sequence value for the group.
+	 * 一组Sequence的进度就是Sequence最小的那个
+     *
+	 * Get the minimum sequence value for the group.
      *
      * @return the minimum sequence value for the group.
      */

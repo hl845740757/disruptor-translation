@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import com.lmax.disruptor.util.Util;
 
 /**
+ * 可以动态增删的Sequence组，进度组
  * A {@link Sequence} group that can dynamically have {@link Sequence}s added and removed while being
  * thread safe.
  * <p>
@@ -52,6 +53,8 @@ public final class SequenceGroup extends Sequence
     }
 
     /**
+	 * 将所有的Sequence设置到同一个进度。
+	 * 所有！所有！所有！
      * Set all {@link Sequence}s in the group to a given value.
      *
      * @param value to set the group of sequences to.
@@ -67,6 +70,7 @@ public final class SequenceGroup extends Sequence
     }
 
     /**
+	 * 添加一个Sequence到该组
      * Add a {@link Sequence} into this aggregate.  This should only be used during
      * initialisation.  Use {@link SequenceGroup#addWhileRunning(Cursored, Sequence)}
      *
@@ -89,6 +93,7 @@ public final class SequenceGroup extends Sequence
     }
 
     /**
+	 * 移除第一个匹配的Sequence
      * Remove the first occurrence of the {@link Sequence} from this aggregate.
      *
      * @param sequence to be removed from this aggregate.
@@ -110,6 +115,8 @@ public final class SequenceGroup extends Sequence
     }
 
     /**
+	 * 在运行期间添加一个Sequence
+	 *
      * Adds a sequence to the sequence group after threads have started to publish to
      * the Disruptor.  It will set the sequences to cursor value of the ringBuffer
      * just after adding them.  This should prevent any nasty rewind/wrapping effects.

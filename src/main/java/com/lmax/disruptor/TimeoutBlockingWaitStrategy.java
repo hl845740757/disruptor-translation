@@ -5,6 +5,10 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+/**
+ * 如果生产者生产速率不够，则阻塞式等待生产者一段时间。
+ * 如果是等待依赖的其它消费者，则轮询式等待。
+ */
 public class TimeoutBlockingWaitStrategy implements WaitStrategy
 {
     private final Lock lock = new ReentrantLock();
@@ -27,6 +31,7 @@ public class TimeoutBlockingWaitStrategy implements WaitStrategy
         long nanos = timeoutInNanos;
 
         long availableSequence;
+        // 阻塞式等待生产者
         if (cursorSequence.get() < sequence)
         {
             lock.lock();
@@ -48,6 +53,7 @@ public class TimeoutBlockingWaitStrategy implements WaitStrategy
             }
         }
 
+        // 轮询式等待其它依赖的消费者消费完该事件
         while ((availableSequence = dependentSequence.get()) < sequence)
         {
             barrier.checkAlert();

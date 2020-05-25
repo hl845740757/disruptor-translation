@@ -18,6 +18,14 @@ package com.lmax.disruptor;
 import java.util.concurrent.locks.LockSupport;
 
 /**
+ * 睡眠等待策略。
+ * <p>
+ * 等待方式：自旋 + yield + sleep
+ * <p>
+ * 表现：延迟不均匀，吞吐量较低，但是cpu占有率也较低。
+ * 算是CPU与性能之间的一个折中，当CPU资源紧张时可以考虑使用该策略。
+ *
+ *
  * Sleeping strategy that initially spins, then uses a Thread.yield(), and
  * eventually sleep (<code>LockSupport.parkNanos(n)</code>) for the minimum
  * number of nanos the OS and JVM will allow while the
@@ -30,7 +38,13 @@ import java.util.concurrent.locks.LockSupport;
  */
 public final class SleepingWaitStrategy implements WaitStrategy
 {
+	/**
+	 * 默认空循环次数
+	 */
     private static final int DEFAULT_RETRIES = 200;
+    /**
+     * 默认每次睡眠时间(睡太久影响响应性，睡太短占用CPU资源)
+     */
     private static final long DEFAULT_SLEEP = 100;
 
     private final int retries;
@@ -62,6 +76,7 @@ public final class SleepingWaitStrategy implements WaitStrategy
 
         while ((availableSequence = dependentSequence.get()) < sequence)
         {
+            // 当依赖的消费者还没消费完该序号的事件时执行等待方法
             counter = applyWaitMethod(barrier, counter);
         }
 
@@ -78,10 +93,12 @@ public final class SleepingWaitStrategy implements WaitStrategy
     {
         barrier.checkAlert();
 
+        // 空循环计数大于100时，简单的空循环
         if (counter > 100)
         {
             --counter;
         }
+        // 空循环计数大于0时，尝试让出CPU
         else if (counter > 0)
         {
             --counter;
@@ -89,6 +106,7 @@ public final class SleepingWaitStrategy implements WaitStrategy
         }
         else
         {
+        	// 不再空循环占用CPU，睡眠
             LockSupport.parkNanos(sleepTimeNs);
         }
 

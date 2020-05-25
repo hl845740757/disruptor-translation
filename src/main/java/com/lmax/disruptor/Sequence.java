@@ -27,6 +27,11 @@ class LhsPadding
 
 class Value extends LhsPadding
 {
+	/**
+	 * 前后各填充7个字段，才能保证数据一定不被伪共享。
+	 * 缓存行一般8字宽，64个字节，为8个long字段的宽度。
+	 * 更多伪共享信息请查阅资料
+	 */
     protected volatile long value;
 }
 
@@ -36,6 +41,13 @@ class RhsPadding extends Value
 }
 
 /**
+ * 序列，用于追踪RingBuffer和EventProcessor的进度，表示生产/消费进度。
+ *
+ * 大写的Sequence称之为序列，小写的sequence称之为序号。Sequencer称之为序号生成器。
+ *
+ * 1.通过CAS支持对一个数组的并发读写操作
+ * 2.通过字段填充解决了CPU缓存行伪共享问题。
+ *
  * <p>Concurrent sequence class used for tracking the progress of
  * the ring buffer and event processors.  Support a number
  * of concurrent operations including CAS and order writes.
@@ -77,11 +89,14 @@ public class Sequence extends RhsPadding
      */
     public Sequence(final long initialValue)
     {
+        // 这里使用Ordered模式写入就可以保证：对象的发布操作不会重排序到对象构造完成前（其它线程不会看见构造未完成的对象）。
+        // 会比volatile开销低一些
         UNSAFE.putOrderedLong(this, VALUE_OFFSET, initialValue);
     }
 
     /**
      * Perform a volatile read of this sequence's value.
+	 * value字段volatile读操作
      *
      * @return The current value of the sequence.
      */
@@ -91,6 +106,16 @@ public class Sequence extends RhsPadding
     }
 
     /**
+	 * 对sequence执行一个Ordered模式写操作,而不是volatile模式写操作。
+	 * 目的是在当前写操作和之前的写操作直接插入一个StoreStore屏障,保证屏障之前的写操作先于当前写操作
+	 * 对其他CPU可见。(减少内存屏障的消耗，StoreLoad屏障消耗较大)
+     * <p>
+     * 在J9中，对内存屏障的使用进行了规范，用{@code setRelease}代替了LazySet/putOrdered叫法。
+     * （对应C++ 11中的Release Acquire模式）
+	 *
+	 * 更多内存屏障/内存栅栏信息请查阅资料。
+     * （建议看一下J9的VarHandle类）
+	 *
      * Perform an ordered write of this sequence.  The intent is
      * a Store/Store barrier between this write and any previous
      * store.
@@ -103,6 +128,13 @@ public class Sequence extends RhsPadding
     }
 
     /**
+	 * 执行一个volatile写操作。
+	 * 目的是在当前写操作与之前的写操作之间插入一个StoreStore屏障，在当前写操作和
+	 * 后续的任意volatile变量读操作之间插入一个StoreLoad屏障，保证当前的volatile写操作
+	 * 对后续的volatile读操作立即可见。
+	 *
+	 * 更多内存屏障/内存栅栏信息请查阅资料。
+	 *
      * Performs a volatile write of this sequence.  The intent is
      * a Store/Store barrier between this write and any previous
      * write and a Store/Load barrier between this write and any
@@ -116,6 +148,7 @@ public class Sequence extends RhsPadding
     }
 
     /**
+	 * CAS更新Sequence的value字段
      * Perform a compare and set operation on the sequence.
      *
      * @param expectedValue The expected current value.
@@ -128,6 +161,7 @@ public class Sequence extends RhsPadding
     }
 
     /**
+	 * 原子方式加1，并返回+1后的值
      * Atomically increment the sequence by one.
      *
      * @return The value after the increment
@@ -138,6 +172,7 @@ public class Sequence extends RhsPadding
     }
 
     /**
+	 * 原子方式加上一个特定的值，并返回加完后的值
      * Atomically add the supplied value.
      *
      * @param increment The value to add to the sequence.

@@ -5,6 +5,7 @@ import com.lmax.disruptor.RingBuffer;
 import com.lmax.disruptor.Sequence;
 
 /**
+ * 事件处理器工厂
  * A factory interface to make it possible to include custom event processors in a chain:
  *
  * <pre><code>

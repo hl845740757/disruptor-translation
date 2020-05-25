@@ -21,6 +21,8 @@ import com.lmax.disruptor.EventProcessor;
 import com.lmax.disruptor.ExceptionHandler;
 
 /**
+ * 为EventHandler绑定异常处理的对象。
+ *
  * A support class used as part of setting an exception handler for a specific event handler.
  * For example:
  * <pre><code>disruptorWizard.handleExceptionsIn(eventHandler).with(exceptionHandler);</code></pre>

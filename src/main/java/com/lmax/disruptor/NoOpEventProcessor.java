@@ -18,6 +18,9 @@ package com.lmax.disruptor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
+ * 无操作的事件处理器。
+ * 主要用于追踪数据发布的正确性的，对于测试来说是很有用的。
+ *
  * No operation version of a {@link EventProcessor} that simply tracks a {@link Sequence}.
  * <p>
  * This is useful in tests or for pre-filling a {@link RingBuffer} from a publisher.
