@@ -35,6 +35,7 @@ public final class BlockingWaitStrategy implements WaitStrategy
     public long waitFor(long sequence, Sequence cursorSequence, Sequence dependentSequence, SequenceBarrier barrier)
         throws AlertException, InterruptedException
     {
+        // 确保生产者已生产者该数据，这期间可能阻塞
         long availableSequence;
         if (cursorSequence.get() < sequence)
         {
@@ -53,6 +54,7 @@ public final class BlockingWaitStrategy implements WaitStrategy
             }
         }
 
+        // 等待前驱消费者消费完对应的事件，这是实现消费者之间happens-before的关键
         while ((availableSequence = dependentSequence.get()) < sequence)
         {
             barrier.checkAlert();

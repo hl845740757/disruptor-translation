@@ -22,6 +22,10 @@ import java.util.*;
 /**
  * 消费者信息仓库，将EventHandler 与 EventProcessor关联起来。
  * 传递给Disruptor的每一个EventHandler最终都会关联到一个EventProcessor。
+ * <P>
+ * 消费者之间的可见性保证：
+ * Sequence是单调递增的，当看见前驱消费者的进度增大时，所有前驱消费者对区间段内的数据的处理对当前消费者来说都是可见的。
+ * volatile的happens-before原则-----前驱消费者们的进度变大(写volatile)先于我看见它变大(读volatile)。
  *
  * Provides a repository mechanism to associate {@link EventHandler}s with {@link EventProcessor}s
  * @param <T> the type of the {@link EventHandler}
@@ -35,7 +39,7 @@ class ConsumerRepository<T> implements Iterable<ConsumerInfo>
         new IdentityHashMap<>();
     /**
      * Sequence到消费者信息的映射
-     * 一个消费者可能有多个Sequence{@link WorkerPool},但是一个Sequence只从属一个消费者。
+     * 一个消费者可能有多个Sequence{@link WorkerPool}，但是一个Sequence只从属一个消费者。
      */
     private final Map<Sequence, ConsumerInfo> eventProcessorInfoBySequence =
         new IdentityHashMap<>();
@@ -46,9 +50,6 @@ class ConsumerRepository<T> implements Iterable<ConsumerInfo>
 
     /**
      * 添加一个单事件处理器的消费者(单线程的消费者)
-     * @param eventprocessor
-     * @param handler
-     * @param barrier
      */
     public void add(
         final EventProcessor eventprocessor,
@@ -63,7 +64,6 @@ class ConsumerRepository<T> implements Iterable<ConsumerInfo>
 
     /**
      * 添加一个单事件处理器的消费者
-     * @param processor
      */
     public void add(final EventProcessor processor)
     {
@@ -73,10 +73,7 @@ class ConsumerRepository<T> implements Iterable<ConsumerInfo>
     }
 
     /**
-     * 添加一个多事件处理器的消费者(WorkerPool代表一个消费者)
-     * (多线程的消费者)
-     * @param workerPool
-     * @param sequenceBarrier
+     * 添加一个多事件处理器的消费者(WorkerPool代表一个多线程的消费者)
      */
     public void add(final WorkerPool<T> workerPool, final SequenceBarrier sequenceBarrier)
     {
@@ -91,7 +88,6 @@ class ConsumerRepository<T> implements Iterable<ConsumerInfo>
     /**
      * 获取消费链末端的消费者的Sequence
      * @param includeStopped 是否包含已停止运行的消费者
-     * @return
      */
     public Sequence[] getLastSequenceInChain(boolean includeStopped)
     {
@@ -110,9 +106,7 @@ class ConsumerRepository<T> implements Iterable<ConsumerInfo>
 
     /**
      * 获取EventHandler绑定的EventProcessor
-     * （每一个EventHandler都会被包装为一个EventProcessor,每一个EventProcessor有自己独立的Sequence）
-     * @param handler
-     * @return
+     * （每一个EventHandler都会被包装为一个EventProcessor，每一个EventProcessor有自己独立的Sequence）
      */
     public EventProcessor getEventProcessorFor(final EventHandler<T> handler)
     {
@@ -128,8 +122,6 @@ class ConsumerRepository<T> implements Iterable<ConsumerInfo>
     /**
      * 获取EventHandler绑定的Sequence
      * （每一个EventHandler都会被包装为一个EventProcessor,每一个EventProcessor有自己独立的Sequence）
-     * @param handler
-     * @return
      */
     public Sequence getSequenceFor(final EventHandler<T> handler)
     {
@@ -138,7 +130,6 @@ class ConsumerRepository<T> implements Iterable<ConsumerInfo>
 
     /**
      * 将这些Sequence标记为不在消费者链的末端了
-     * @param barrierEventProcessors
      */
     public void unMarkEventProcessorsAsEndOfChain(final Sequence... barrierEventProcessors)
     {
@@ -158,9 +149,6 @@ class ConsumerRepository<T> implements Iterable<ConsumerInfo>
      * 获取EventHandler绑定的SequenceBarrier
      * （每一个EventHandler都会被包装为一个EventProcessor,每一个EventProcessor从属于一个消费者，
      *  一个消费者有且仅有一个SequenceBarrier)
-     *
-     * @param handler
-     * @return
      */
     public SequenceBarrier getBarrierFor(final EventHandler<T> handler)
     {
@@ -172,8 +160,6 @@ class ConsumerRepository<T> implements Iterable<ConsumerInfo>
      * 如果EventHandler是独立工作的，那么可以获取它的EventProcessorInfo
      * 独立工作的EventHandler会被包装为一个独立的消费者{@link BatchEventProcessor}，
      * BatchEventProcessor消费者对应的消费者信息就是 {@link EventProcessorInfo}
-     * @param handler
-     * @return
      */
     private EventProcessorInfo<T> getEventProcessorInfo(final EventHandler<T> handler)
     {
@@ -182,8 +168,6 @@ class ConsumerRepository<T> implements Iterable<ConsumerInfo>
 
     /**
      * 获取Sequence对应的消费者信息，一个消费者可能有多个Sequence，但是一个Sequence一定只从属于一个消费者
-     * @param barrierEventProcessor
-     * @return
      */
     private ConsumerInfo getEventProcessorInfo(final Sequence barrierEventProcessor)
     {

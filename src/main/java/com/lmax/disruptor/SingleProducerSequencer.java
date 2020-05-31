@@ -41,13 +41,15 @@ abstract class SingleProducerSequencerFields extends SingleProducerSequencerPad
     }
 
     /**
-     * 已预分配的序号缓存，因为是单线程的生产者，不存在竞争，因此采用普通的long变量
+     * 已预分配的缓存，因为是单线程的生产者，不存在竞争，因此采用普通的long变量
      * 表示 {@link #cursor} +1 ~  nextValue 这段空间被预分配出去了，但是可能还未填充数据。
-     *
+     * <p>
      * 会在真正分配空间时更新
      * {@link SingleProducerSequencer#tryNext(int)}
      * {@link SingleProducerSequencer#next(int)}
-     * 
+     * <p>
+     * 这个名字其实有点坑爹，其实不是下一个value。
+     *
      * Set to -1 as sequence starting point
      */
     long nextValue = Sequence.INITIAL_VALUE;
@@ -120,7 +122,7 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
 	 * 是否有足够的容量
 	 * 注释可参考{@link #next(int)}
 	 * @param requiredCapacity 需要的容量
-	 * @param doStore 是否写入到volatile进度信息中（是否存储）,是否需要volatile来保证可见性
+	 * @param doStore 是否写入到volatile进度信息中（是否存储），是否需要volatile来保证可见性
 	 *                确保之前的数据对消费者可见。
 	 * @return
 	 */
@@ -137,12 +139,12 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
 
 		// wrapPoint > cachedGatingSequence 表示生产者追上消费者产生环路(追尾)，还需要更多的空间，上次看见的序号缓存无效，
 		// cachedGatingSequence > nextValue 表示消费者的进度大于生产者进度，正常情况下不可能，
-		// 但是在运行期间调用过 claim(long)方法则可能产生该情况，也表示缓存无效，需要重新判断。
+		// 但是在运行期间调用过 claim(long)方法则可能产生该情况，也表示缓存无效，需要重新判断。（建议忽略）
         if (wrapPoint > cachedGatingSequence || cachedGatingSequence > nextValue)
         {
-			// 插入StoreLoad内存屏障/栅栏，保证可见性。
-			// 因为publish使用的是set()/putOrderedLong，并不保证其他消费者能及时看见发布的数据
-			// 当我再次申请更多的空间时，必须保证消费者能消费发布的数据
+			// 因为publish使用的是set()/putOrderedLong，并不保证消费者能及时看见发布的数据，
+            // 当我再次申请更多的空间时，必须保证消费者能消费发布的数据（那么就需要进度对消费者立即可见，使用volatile写即可）
+            // 插入StoreLoad内存屏障/栅栏，确保立即的可见性。
             if (doStore)
             {
                 cursor.setVolatile(nextValue);  // StoreLoad fence
@@ -152,7 +154,7 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
             long minSequence = Util.getMinimumSequence(gatingSequences, nextValue);
             this.cachedValue = minSequence;
 
-            // 会形成环路(产生追尾)，空间不足
+            // 根据最新的消费者进度，仍然形成环路(产生追尾)，则表示空间不足
             if (wrapPoint > minSequence)
             {
                 return false;
@@ -185,7 +187,7 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
             throw new IllegalArgumentException("n must be > 0");
         }
 
-        // 上次分配的序号的缓存(已分配到这里) 第一个申请的空间是0
+        // 已分配的序号的缓存(已分配到这里)，初始-1
         long nextValue = this.nextValue;
 
 		// 本次申请分配的序号
@@ -198,9 +200,9 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
 		// 上次缓存的最小网关序号(消费最慢的消费者的进度)
         long cachedGatingSequence = this.cachedValue;
 
-        // wrapPoint > cachedGatingSequence 表示生产者追上消费者产生环路(追尾)，上次看见的序号缓存无效，还需要更多的空间
-        // cachedGatingSequence > nextValue 表示消费者的进度大于生产者进度，nextValue无效，单生产者正常情况下不可能，
-        // 在运行期间调用过 claim(long)方法可能产生该情况，也表示缓存无效，需要重新判断
+        // wrapPoint > cachedGatingSequence 表示生产者追上消费者产生环路(追尾)，即缓冲区已满，此时需要获取消费者们最新的进度，以确定是否队列满
+        // cachedGatingSequence > nextValue 表示消费者的进度大于生产者进度，nextValue无效，建议忽略，
+        // 正常情况下不会出现，调用claim(long)方法可能产生该情况，claim可能导致bug，只用在测试
         if (wrapPoint > cachedGatingSequence || cachedGatingSequence > nextValue)
         {
             // 插入StoreLoad内存屏障/栅栏，保证可见性。
@@ -209,14 +211,16 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
             cursor.setVolatile(nextValue);  // StoreLoad fence
 
             long minSequence;
-            // 如果末端的消费者们仍然没让出该插槽则等待，知道消费者们让出该插槽
+            // 如果末端的消费者们仍然没让出该插槽则等待，直到消费者们让出该插槽
+            // 注意：这是导致死锁的重要原因！
+            // 死锁分析：如果消费者挂掉了，而它的sequence没有从gatingSequences中删除的话，则生产者会死锁，它永远等不到消费者更新。
             while (wrapPoint > (minSequence = Util.getMinimumSequence(gatingSequences, nextValue)))
             {
                 LockSupport.parkNanos(1L); // TODO: Use waitStrategy to spin?
             }
 
             // 缓存生产者们最新的消费进度。
-            // (该值可能是大于wrapPoint的，那么如果下一次的wrapPoint还小于cachedValue则可以直接进行分配)
+            // (该值可能是大于wrapPoint的，那么如果下一次的 wrapPoint小于等于cachedValue则可以直接进行分配)
             // 比如：我可能需要一个插槽位置，结果突然直接消费者们让出来3个插槽位置
             this.cachedValue = minSequence;
         }
@@ -281,6 +285,7 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
     {
     	// 单生产者模式下，预分配空间是操作的 nextValue,因此修改nextValue即可
 		// 这里可能导致 nextValue < cachedValue
+        // 这里没有更新 cursor （可能导致bug）
         this.nextValue = sequence;
     }
 
@@ -291,7 +296,7 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
     @Override
     public void publish(long sequence)
     {
-    	// 更新发布进度，使用的是set，并没有保证对其他线程立即可见(最终会看见)
+    	// 更新发布进度，使用的是set（putOrderedLong），并没有保证对其他线程立即可见(最终会看见)
 		// 在下一次申请更多的空间时，如果发现需要消费者加快消费，则必须保证数据对消费者可见
         cursor.set(sequence);
         // 唤醒阻塞的消费者们(事件处理器们)

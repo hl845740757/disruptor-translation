@@ -24,7 +24,7 @@ import java.util.concurrent.Executor;
 
 /**
  * 单事件处理器消费者信息。
- * (单线程事件处理器的消费者,单个EventProcessor处理所有的事件)
+ * (单个EventProcessor处理所有的事件的消费者)
  *
  * <p>Wrapper class to tie together a particular event processing stage</p>
  * <p>
@@ -35,7 +35,7 @@ import java.util.concurrent.Executor;
 class EventProcessorInfo<T> implements ConsumerInfo
 {
 	/**
-	 * 事件处理器，该EventProcessor用于处理所有的事件。
+	 * 事件处理器，该EventProcessor用于处理所有的事件，目前其实就是{@link com.lmax.disruptor.BatchEventProcessor}。
 	 * {@link com.lmax.disruptor.BatchEventProcessor}
 	 * {@link com.lmax.disruptor.WorkProcessor}
 	 */

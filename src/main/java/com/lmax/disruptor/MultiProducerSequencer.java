@@ -26,7 +26,7 @@ import com.lmax.disruptor.util.Util;
  * 多生产者模型下的序号生成器
  * 注意:
  * 在使用该序号生成器时，调用{@link Sequencer#getCursor()}后必须 调用{@link Sequencer#getHighestPublishedSequence(long, long)}
- * 确定真正可用的序号。（因为多生产者模型下，生产者之间是无锁的，预分配空间，那么真正填充的数据可能是非连续的），因此需要确认
+ * 确定真正可用的序号。（因为多生产者模型下，生产者之间是无锁的，预分配空间，那么真正填充的数据可能是非连续的），因此需要确认。
  *
  * <p>Coordinator for claiming sequences for access to a data structure while tracking dependent {@link Sequence}s.
  * Suitable for use for sequencing across multiple publisher threads.</p>
@@ -38,9 +38,13 @@ import com.lmax.disruptor.util.Util;
 public final class MultiProducerSequencer extends AbstractSequencer
 {
     private static final Unsafe UNSAFE = Util.getUnsafe();
-    // 获取数组对象头元素偏移量
+    /**
+     * 获取{@link #availableBuffer}数组对象头元素偏移量
+     */
     private static final long BASE = UNSAFE.arrayBaseOffset(int[].class);
-    // 数组一个元素的地址偏移量(用于计算指定下标的元素的内存地址)
+    /**
+     * 获取{@link #availableBuffer}数组一个元素的地址偏移量(用于计算指定下标的元素的内存地址)
+     */
     private static final long SCALE = UNSAFE.arrayIndexScale(int[].class);
 
 	/**
@@ -48,8 +52,13 @@ public final class MultiProducerSequencer extends AbstractSequencer
 	 * 在任何时候查询了消费者进度信息时都需要更新它。
 	 * 某些时候可以减少{@link #gatingSequences}的遍历(减少volatile读操作)。
 	 *
-	 * Util.getMinimumSequence(gatingSequences, current)的查询结果是递增的，但是缓存结果不一定是递增的，变量的更新存在竞态条件，
+     *
+	 * Util.getMinimumSequence(gatingSequences, current)的查询结果是递增的，但是缓存结果不一定是递增的，变量的更新存在竞争，
 	 * 它可能会被设置为一个更小的值。
+     *
+     * <p>
+     * Q: 为什么在该字段上的竞争的良性的？
+     * A: 生产者只需要确保不会覆盖未消费的槽位，因此看见消费者进度落后是允许的，即看见一个比自己上次看见的更旧的值是合法的。
      *
      * <p>
      * Q: 为什么使用{@link Sequence}类，而不是普通的 volatile long？
@@ -65,7 +74,7 @@ public final class MultiProducerSequencer extends AbstractSequencer
 	 */
     private final Sequence gatingSequenceCache = new Sequence(Sequencer.INITIAL_CURSOR_VALUE);
 
-    // 多生产者模式下，标记哪些序号是真正被填充了数据的。 (用于获取连续的可用空间)
+    // 多生产者模式下，标记哪些序号是真正被填充了数据的。(用于获取连续的可用空间)
     // 其实就是表明数据是属于第几环
     // availableBuffer tracks the state of each ringbuffer slot
     // see below for more details on the approach
@@ -115,7 +124,6 @@ public final class MultiProducerSequencer extends AbstractSequencer
 	 * @param gatingSequences 网关序列们
 	 * @param requiredCapacity 需要的空间
 	 * @param cursorValue 当前看见的生产者进度
-	 * @return
 	 */
     private boolean hasAvailableCapacity(Sequence[] gatingSequences, final int requiredCapacity, long cursorValue)
     {
@@ -126,19 +134,22 @@ public final class MultiProducerSequencer extends AbstractSequencer
 		// (对单个线程来说可能看见一个比该线程上次看见的更小的值/对另一个线程来说就可能看见一个比生产进度更大的值)
         long cachedGatingSequence = gatingSequenceCache.get();
 
-		// 1.wrapPoint > cachedGatingSequence 表示生产者追上消费者产生环路，上次看见的序号缓存无效，还需要更多的空间
-		// 2.cachedGatingSequence > cursorValue 表示消费者的进度大于当前生产者进度，cachedGatingSequence无效，- 竞态更新gatingSequenceCache可能导致该情况
-		// 当其它生产者竞争成功，发布的数据也被消费者消费了时可能产生。(如2生产者1个消费者)
+        // 1.wrapPoint > cachedGatingSequence 表示生产者追上消费者产生环路，上次看见的序号缓存无效，即缓冲区已满，此时需要获取消费者们最新的进度，以确定是否队列满。
+        // 2.cachedGatingSequence > cursorValue   表示消费者的进度大于当前生产者进度，表示cursorValue无效，有以下可能：
+        // 2.1 其它生产者发布了数据，并更新了gatingSequenceCache，并已被消费（当前线程进入该方法时可能被挂起，重新恢复调度时看见一个更大值）。
+        // 2.2 claim的调用（建议忽略）
+
         if (wrapPoint > cachedGatingSequence || cachedGatingSequence > cursorValue)
         {
-            // 缓存无效，尝试更新一下缓存
+            // 走进这里表示cachedGatingSequence过期或cursorValue过期，此时都需要获取最新的gatingSequence
             long minSequence = Util.getMinimumSequence(gatingSequences, cursorValue);
+
             // 这里存在竞态条件，多线程模式下，可能会被设置为多个线程看见的结果中的任意一个。
-            // 可能比 cachedGatingSequence更小，可能比cursorValue更大。
-            // 但该竞争是良性的，产生的结果是可控的，不会导致错误
+            // 可能比cachedGatingSequence更小，可能比cursorValue更大。
+            // 但该竞争是良性的，产生的结果是可控的，不会导致错误（不会导致生产者覆盖未消费的数据）。
             gatingSequenceCache.set(minSequence);
 
-            // 是否产生环路/追尾
+            // 根据最新的消费者进度，仍然形成环路(产生追尾)，则表示空间不足
             if (wrapPoint > minSequence)
             {
                 return false;
@@ -157,6 +168,7 @@ public final class MultiProducerSequencer extends AbstractSequencer
     {
     	// 因为多生产者模式下，预分配空间是直接操作的cursor，因此直接设置cursor
 		// 这里可能导致 gatingSequenceCache > cursor
+        // 可能导致bug
         cursor.set(sequence);
     }
 
@@ -223,25 +235,26 @@ public final class MultiProducerSequencer extends AbstractSequencer
             long cachedGatingSequence = gatingSequenceCache.get();
 
             // 第一步：空间不足就继续等待。
-			// wrapPoint > cachedGatingSequence 表示生产者追上消费者产生环路，上次看见的序号缓存无效，还需要更多的空间
-			// cachedGatingSequence > nextValue 表示消费者的进度大于当前生产者进度，cachedGatingSequence无效 - 竞态更新gatingSequenceCache可能导致该情况
-			// 当其它生产者竞争成功，发布的数据也被消费者消费了时可能产生。(如2生产者1个消费者)
+            // 1.wrapPoint > cachedGatingSequence 表示生产者追上消费者产生环路，上次看见的序号缓存无效，即缓冲区已满，此时需要获取消费者们最新的进度，以确定是否队列满。
+            // 2.cachedGatingSequence > current   表示消费者的进度大于当前生产者进度，表示current无效，有以下可能：
+            // 2.1 其它生产者发布了数据，并更新了gatingSequenceCache，并已被消费（当前线程进入该方法时可能被挂起，重新恢复调度时看见一个更大值）。
+            // 2.2 claim的调用（建议忽略）
+
             if (wrapPoint > cachedGatingSequence || cachedGatingSequence > current)
             {
-                // 走进这里表示当前缓存对我来说没有帮助，尝试获取最新的消费者进度
+                // 走进这里表示cachedGatingSequence过期或current过期，此时都需要获取最新的gatingSequence
                 long gatingSequence = Util.getMinimumSequence(gatingSequences, current);
 
                 // 消费者最新的进度仍然与我构成了环路，那么只能重试
-                // wrapPoint > gatingSequence 意外着 gatingSequence无效，因为生产者期待的是一个大于等于wrapPoint的值
                 if (wrapPoint > gatingSequence)
                 {
-                    // 这里和查询是否用足够空间的区别，会停顿一下生产者，减少竞争程度
+                    // wrapPoint > gatingSequence 意外着 gatingSequence无效，因为生产者期待的是一个大于等于wrapPoint的值，因此也就不更新缓存。
                     LockSupport.parkNanos(1); // TODO, should we spin based on the wait strategy?
                     continue;
                 }
 
                 // 检测到未构成环路(多线程下这都是假设条件)，更新网关序列，然后进行重试
-                // 这里存在竞态条件，多线程模式下，可能会被设置为多个线程看见的结果中的任意一个，可能会被设置为一个更小的值，从而小于当前分配的值(current)
+                // 这里存在竞态条件，多线程模式下，可能会被设置为多个线程看见的结果中的任意一个，可能会被设置为一个更小的值，从而小于当前的查询值
                 gatingSequenceCache.set(gatingSequence);
 
                 // 这里看见有足够空间，这里如果尝试竞争空间会产生重复的代码，其实就是外层的代码，因此直接等待下一个循环
@@ -251,7 +264,7 @@ public final class MultiProducerSequencer extends AbstractSequencer
             {
                 // 第三步：成功竞争到了这片空间，返回
                 // 注意！这里更新了生产者进度，然而生产者并未真正发布数据。
-                // 因此需要调用getHighestPublishedSequence()确认真正的可用空间
+                // 因此消费者需要调用getHighestPublishedSequence()确认真正的可用空间
                 break;
             }
             // 第三步：竞争失败则重试
@@ -358,7 +371,7 @@ public final class MultiProducerSequencer extends AbstractSequencer
     }
 
     /**
-	 * 设置目标插槽上的数据可用了，将对于插槽上的标记置位可用标记
+	 * 设置目标插槽上的数据可用，将对应插槽上的标记置为可用标记（第几环）。
 	 *
      * The below methods work on the availableBuffer flag.
      * <p>

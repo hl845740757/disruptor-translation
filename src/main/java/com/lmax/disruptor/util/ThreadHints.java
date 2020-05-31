@@ -22,6 +22,8 @@ import java.lang.invoke.MethodHandles;
 import static java.lang.invoke.MethodType.methodType;
 
 /**
+ * 在JDK9的Thread中增加了{@code onSpinWait}方法，如果允许环境是JDK9的话，则在自旋等待时，尝试调用{@code onSpinWait}方法。
+ *
  * This class captures possible hints that may be used by some
  * runtimes to improve code performance. It is intended to capture hinting
  * behaviours that are implemented in or anticipated to be spec'ed under the

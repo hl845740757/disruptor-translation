@@ -23,8 +23,6 @@ public interface DataProvider<T>
 {
 	/**
 	 * 根据指定序号获取data
-	 * @param sequence
-	 * @return
 	 */
     T get(long sequence);
 }

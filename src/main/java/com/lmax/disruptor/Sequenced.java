@@ -1,7 +1,8 @@
 package com.lmax.disruptor;
 
 /**
- * 定义了一个与Sequence关联的数据结构
+ * 该接口是面向生产者的，生产者通过该接口获取队列容量，和可用空间，并在填充数据之后，发布对应的sequence（这些sequence对应的数据已可消费）。
+ * <P>
  * 申请空间之后，必须使用对应的发布方法，发布数据(表示这些空间的数据已经可用)
  * {@link #next()} {@link #tryNext()} ---> {@link #publish(long)}
  * {@link #next(int)} {@link #tryNext(int)} ---> {@link #publish(long, long)}

@@ -16,9 +16,8 @@
 package com.lmax.disruptor;
 
 /**
- * 序号生成器，为生产者们提供序号。
- *
- * 同时追踪消费序号的消费链末端们的消费者进度{@link Sequence},以协调序号生成器和消费者们之间的速度。
+ * 序号生成器。
+ * 生产者们通过该对象发布可用的序号，消费者们通过该对象查询可用的序号。
  *
  * Coordinates claiming sequences for access to a data structure while tracking dependent {@link Sequence}s
  */
@@ -35,6 +34,8 @@ public interface Sequencer extends Cursored, Sequenced
 	 * 注意：这是个很危险的方法，不要在运行期间执行，存在生产者与生产者竞争和生产者与消费者竞争，
 	 * 可能造成数据丢失，各种运行异常，仅能在初始化阶段使用，目前已不需要使用。
 	 * 现在默认的初始化都是使用的{@link #INITIAL_CURSOR_VALUE}）
+	 * <P>
+	 * 该方法最好忽略，当做没有。
 	 *
      * Claim a specific sequence.  Only used if initialising the ring buffer to
      * a specific value.
@@ -67,24 +68,8 @@ public interface Sequencer extends Cursored, Sequenced
 
     /**
 	 * 移除这些网关Sequence(消费者消费序列/进度)，不再跟踪它们的进度信息；
-	 * 注意：如果移除了所有的消费者，那么生产者便不会被阻塞！
-	 * 也就能{@link RingBuffer#next()} 死循环中醒来。
-	 * <p>
-	 * 2019年9月17日，最近正在纠结，如何让生产者安全的发布事件，之前使用{@link #tryNext()}，不停的重试，其实一点都不好。
-	 * 因此以前代码大概是这样的：
-	 * <pre>{@code
-	 * 	    while(!isShuttingDown()) {
-	 * 	        try {
-	 * 	        	long sequence = ringBuffer.tryNext();
-	 * 	        } catch (InsufficientCapacityException ignore) {
-	 * 	            //
-	 * 	            LockSupport.parkNanos(1);
-	 * 	        }
-	 * 	    }
-	 * }
-	 * </pre>
-	 * 而如果消费者在shutdown以后remove掉自己，那么生产者就会从{@link RingBuffer#next()}中返回！
-	 *
+	 * 特殊用法：如果移除了所有的消费者，那么生产者便不会被阻塞，也就能{@link RingBuffer#next()} 死循环中醒来！
+	 * 但是比较坑爹的是，你只有自己去实现{@link EventProcessor}时，才能在线程退出时移除自己的sequence。
 	 *
      * Remove the specified sequence from this sequencer.
      *

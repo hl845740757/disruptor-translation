@@ -16,8 +16,8 @@
 package com.lmax.disruptor;
 
 /**
- * 它的{@link WorkerPool}消费者里的一个事件处理器(组件)。
- * 手动加粗：它是事件处理器，不是消费者。
+ * 它是{@link WorkProcessor}处理事件的实现，两者之间是组合关系，{@link WorkProcessor}负责跟踪和拉取事件，{@link WorkHandler}负责处理事件。
+ * 手动加粗：{@link WorkHandler}不是消费者。
  *
  * Callback interface to be implemented for processing units of work as they become available in the {@link RingBuffer}.
  *

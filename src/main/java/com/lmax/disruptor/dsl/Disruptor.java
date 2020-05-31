@@ -39,8 +39,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 1.领域特定语言 domain-specific language (DSL)。
- *   实现了建造者模式(为RingBuffer的建造者)。
+ * 1.该类其实是个门面，用于帮助用户组织消费者。
  *
  * 2.{@link #handleEventsWith(EventHandler[])}
  *   {@link #handleEventsWith(EventProcessor...)}
@@ -75,8 +74,8 @@ public class Disruptor<T>
 {
     private final RingBuffer<T> ringBuffer;
     /**
-     * 为消费者创建线程用
-     * 注意死锁问题。 查看{@link BasicExecutor}注释
+     * 为消费者创建线程用。
+     * 查看{@link BasicExecutor}以避免死锁问题。
      */
     private final Executor executor;
     /**
@@ -89,15 +88,16 @@ public class Disruptor<T>
     private final AtomicBoolean started = new AtomicBoolean(false);
 	/**
 	 * EventHandler的异常处理器。
-	 * 警告！！！默认的异常处理器在EventHandler抛出异常时会终止EventProcessor的线程(退出任务)。
+	 * 警告！！！默认的异常处理器在EventHandler抛出异常时会终止EventProcessor的线程(退出任务)，可能导致死锁。
 	 */
     private ExceptionHandler<? super T> exceptionHandler = new ExceptionHandlerWrapper<>();
 
     /**
 	 * 创建一个Disruptor，默认使用阻塞等待策略。
 	 *
-	 * 为什么被标记为不推荐呢？ 因为disruptor需要为每一个EventHandler(EventProcessor)创建一个线程，
+	 * 为什么被标记为不推荐呢？ 因为disruptor需要为每一个{@link EventProcessor}创建一个线程，
 	 * 采用有界线程池容易导致无法创建足够多的线程而导致死锁。
+     * 其实是为每一个{@link EventHandler} {@link WorkHandler}创建一个线程。
 	 *
      * Create a new Disruptor. Will default to {@link com.lmax.disruptor.BlockingWaitStrategy} and
      * {@link ProducerType}.MULTI

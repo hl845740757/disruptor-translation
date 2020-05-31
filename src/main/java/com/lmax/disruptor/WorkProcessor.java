@@ -18,8 +18,8 @@ package com.lmax.disruptor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * WorkPool消费者里面的事件处理单元，不是消费者，只是一个消费者里面的一个元件。
- * 多个WorkProcessor协作构成WorkPool消费者
+ * WorkPool消费者里面的事件处理单元，不是消费者，只是一个消费者里面的一个工作单元，多个WorkProcessor协作构成WorkPool消费者。
+ * {@link WorkProcessor}负责跟踪和拉取事件，{@link WorkHandler}负责处理事件。
  *
  * <p>A {@link WorkProcessor} wraps a single {@link WorkHandler}, effectively consuming the sequence
  * and ensuring appropriate barriers.</p>
@@ -41,21 +41,21 @@ public final class WorkProcessor<T>
      */
     private final Sequence sequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE);
     /**
-	 * 生产者消费者共享的数据结构
+	 * 生产者消费者共享的数据结构，{@link WorkProcessor}之间先竞争sequence，竞争成功的那个可以消费。
 	 */
     private final RingBuffer<T> ringBuffer;
     /**
-     * WorkProcessor所属的消费者的屏障
+     * WorkProcessor所属的消费者的屏障。
      */
     private final SequenceBarrier sequenceBarrier;
     /**
-     * WorkProcessor绑定的事件处理器
+     * WorkProcessor绑定的事件处理器。
+     * {@link WorkProcessor}负责跟踪和拉取事件，{@link WorkHandler}负责处理事件。
      */
     private final WorkHandler<? super T> workHandler;
     /**
      * workProcessor绑定的异常处理器，
-     * 警告！！！
-     * 默认的异常处理器{@link com.lmax.disruptor.dsl.Disruptor#exceptionHandler}，出现异常时会打断运行
+     * 警告！！！默认的异常处理器{@link com.lmax.disruptor.dsl.Disruptor#exceptionHandler}，出现异常时会打断运行，可能导致死锁。
      */
     private final ExceptionHandler<? super T> exceptionHandler;
     /**
@@ -64,14 +64,12 @@ public final class WorkProcessor<T>
 	 */
     private final Sequence workSequence;
 
-    /**
-     * 事件释放器，自身不再消费
-     */
     private final EventReleaser eventReleaser = new EventReleaser()
     {
         @Override
         public void release()
         {
+            // 设置为MAX_VALUE可以使得当前线程停止消费，且不影响生产者和其它消费者
             sequence.set(Long.MAX_VALUE);
         }
     };
