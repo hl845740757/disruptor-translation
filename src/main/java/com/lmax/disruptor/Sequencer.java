@@ -108,7 +108,10 @@ public interface Sequencer extends Cursored, Sequenced
 
     /**
 	 * 查询 nextSequence-availableSequence 区间段之间连续发布的最大序号。多生产者模式下可能是不连续的
-	 * 多生产者模式下{@link Sequencer#next(int)} next是预分配的，因此可能部分数据还未被填充
+	 * 多生产者模式下{@link Sequencer#next(int)} next是预分配的，因此可能部分数据还未被填充。
+	 * <p>
+	 * 警告：多生产者模式下该操作十分消耗性能，如果{@link WaitStrategy#waitFor(long, Sequence, Sequence, SequenceBarrier)}获取sequence之后不完全消费，
+	 * 而是每次消费一点，再拉取一点，则会在该操作上形成巨大的开销。
 	 *
      * Get the highest sequence number that can be safely read from the ring buffer.  Depending
      * on the implementation of the Sequencer this call may need to scan a number of values

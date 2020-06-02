@@ -418,6 +418,9 @@ public final class MultiProducerSequencer extends AbstractSequencer
     /**
      * 查询 nextSequence-availableSequence 区间段之间连续发布的最大序号。多生产者模式下可能是不连续的。
      * 多生产者模式下{@link Sequencer#next(int)} next是预分配的，因此可能部分数据还未被填充。
+     * <P>
+     * 警告：该操作十分消耗性能，如果{@link WaitStrategy#waitFor(long, Sequence, Sequence, SequenceBarrier)}获取sequence之后不完全消费，
+     * 而是每次消费一点，再拉取一点，则会在该操作上形成巨大的开销。
      *
      * @param lowerBound 我期望消费的最小序号，前面的一定都已经发布了
      * @param availableSequence The sequence to scan to.看见的已发布的最大序号
