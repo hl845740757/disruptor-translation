@@ -25,7 +25,8 @@ import com.lmax.disruptor.util.ThreadHints;
  * 阻塞等待策略。
  * 通过lock等待【生产者】发布数据，可以达到较低的cpu开销。
  * 注意：有坑！Disruptor框架并没有消费者之间的协调策略，而是通过简单的忙等策略实现的，
- * 因此，如果前置消费者消费较慢，而后置消费者速度较快，使用该策略反而会导致极大的开销，这种情况下可使用{@link SleepingWaitStrategy}。
+ * 因此，如果前置消费者消费较慢，而后置消费者速度较快，使用该策略反而会导致极大的开销，
+ * 要解决问题可重写该实现，将第二阶段替换为 sleep 或 parkNanos(1);
  *
  * Blocking strategy that uses a lock and condition variable for {@link EventProcessor}s waiting on a barrier.
  * <p>

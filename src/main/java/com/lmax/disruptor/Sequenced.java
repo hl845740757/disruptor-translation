@@ -109,7 +109,9 @@ public interface Sequenced
     void publish(long sequence);
 
     /**
-	 * 批量发布数据，表示 [lowest,highest]区间段整段数据可用了
+	 * 批量发布数据，表示 [lowest,highest]区间段整段数据可用了。
+	 * 一般情况下，{@code hi}是{@link #next()}等方法申请到的最大序号，
+     * 但也可能不是，生产者可能分段发布数据，以避免阻塞消费者。
      * Batch publish sequences.  Called when all of the events have been filled.
      *
      * @param lo first sequence number to publish

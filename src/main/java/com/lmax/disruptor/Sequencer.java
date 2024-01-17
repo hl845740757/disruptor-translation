@@ -107,11 +107,15 @@ public interface Sequencer extends Cursored, Sequenced
     long getMinimumSequence();
 
     /**
-	 * 查询 nextSequence-availableSequence 区间段之间连续发布的最大序号。多生产者模式下可能是不连续的
-	 * 多生产者模式下{@link Sequencer#next(int)} next是预分配的，因此可能部分数据还未被填充。
+	 * 查询 [nextSequence , availableSequence] 区间段之间连续发布的最大序号。
+	 * 该接口用于消费者屏障查询真实可用的序号。
 	 * <p>
-	 * 警告：多生产者模式下该操作十分消耗性能，如果{@link WaitStrategy#waitFor(long, Sequence, Sequence, SequenceBarrier)}获取sequence之后不完全消费，
+	 * 由于生产者是先申请序号，再发布数据；因此{@link #getCursor()}指向的是即将发布数据的槽，而不一定已经具备数据。
+	 * 而消费者只能顺序消费，因此【只要消费者的依赖可能包含生产者】，在观察到依赖的最大可用序号后，都应该查询真实可用的序号。
+	 * <p>
+	 * 警告：多生产者模式下该操作十分消耗性能，如果{@link WaitStrategy#waitFor}获取sequence之后不完全消费，
 	 * 而是每次消费一点，再拉取一点，则会在该操作上形成巨大的开销。
+	 * 建议的的方式：先拉取到本地，然后在本地分批处理，避免频繁调用{@link WaitStrategy#waitFor}。
 	 *
      * Get the highest sequence number that can be safely read from the ring buffer.  Depending
      * on the implementation of the Sequencer this call may need to scan a number of values

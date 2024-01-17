@@ -49,6 +49,8 @@ class SequenceGroups
             updatedSequences = copyOf(currentSequences, currentSequences.length + sequencesToAdd.length);
             cursorSequence = cursor.getCursor();
 
+			// 这里对新的sequence进行初始化，仅用于避免阻塞生产者；
+			// 否则一旦更新成功，生产者必须等待这些序号更新为最新值
             int index = currentSequences.length;
             for (Sequence sequence : sequencesToAdd)
             {
@@ -58,6 +60,7 @@ class SequenceGroups
         }
         while (!updater.compareAndSet(holder, currentSequences, updatedSequences));
 
+		// 在更新成功后，需要同步进度，这里的临时变量仅用于保证这些消费者同步
         cursorSequence = cursor.getCursor();
         for (Sequence sequence : sequencesToAdd)
         {

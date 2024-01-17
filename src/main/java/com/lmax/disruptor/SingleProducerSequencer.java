@@ -304,7 +304,8 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
     }
 
     /**
-	 * 发布数据，这个hi其实就是{@link #nextValue}
+	 * 批量发布数据 -- 一般而言，这个hi就是{@link #nextValue}，
+	 * 但也可能不是，生产者可能分段发布数据，以避免阻塞消费者。
      * @see Sequencer#publish(long, long)
      */
     @Override

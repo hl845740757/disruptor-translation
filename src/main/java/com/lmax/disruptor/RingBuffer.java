@@ -64,6 +64,7 @@ abstract class RingBufferFields<E> extends RingBufferPad
 
     /**
      * 索引掩码，表示后X位是有效数字(截断)。位运算代替取余快速计算插槽索引
+	 * (需要放在数组前面充当缓存行填充)
      */
     private final long indexMask;
     /**

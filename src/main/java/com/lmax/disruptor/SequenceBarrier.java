@@ -33,6 +33,11 @@ public interface SequenceBarrier
     /**
 	 * 在该屏障上等待，直到该序号的数据可以被消费。
 	 * 是否可消费取决于生产者的cursor 和 当前事件处理器依赖的的sequence。
+     * <p>
+     * 警告：多生产者模式下该操作十分消耗性能，如果在{@code waitFor}获取sequence之后不完全消费，
+     * 而是每次消费一点，再拉取一点，则会在该操作上形成巨大的开销  —— 极端情况是每次拉取1个，性能将差到极致。
+     * 建议的的方式：先拉取到本地，然后在本地分批处理，避免频繁调用{@code waitFor}。
+     * <p>
      * Wait for the given sequence to be available for consumption.
      *
      * @param sequence to wait for 事件处理器期望消费的下一个序号
