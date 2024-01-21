@@ -141,12 +141,10 @@ public final class MultiProducerSequencer extends AbstractSequencer
 
         if (wrapPoint > cachedGatingSequence || cachedGatingSequence > cursorValue)
         {
-            // 走进这里表示cachedGatingSequence过期或cursorValue过期，此时都需要获取最新的gatingSequence
-            long minSequence = Util.getMinimumSequence(gatingSequences, cursorValue);
-
-            // 这里存在竞态条件，多线程模式下，可能会被设置为多个线程看见的结果中的任意一个。
-            // 可能比cachedGatingSequence更小，可能比cursorValue更大。
+            // 获取最新的消费者进度并缓存起来
+            // 这里存在竞态条件，多线程模式下，可能会被设置为多个线程看见的结果中的任意一个，可能比cachedGatingSequence更小，可能比cursorValue更大。
             // 但该竞争是良性的，产生的结果是可控的，不会导致错误（不会导致生产者覆盖未消费的数据）。
+            long minSequence = Util.getMinimumSequence(gatingSequences, cursorValue);
             gatingSequenceCache.set(minSequence);
 
             // 根据最新的消费者进度，仍然形成环路(产生追尾)，则表示空间不足
